@@ -6,3 +6,4 @@ paths:
   devices_dir: devices.d
   thresholds_file: thresholds.yml
   adapters_file: adapters.yml
+  queue_db: data/queue/queue.db

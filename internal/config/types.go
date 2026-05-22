@@ -16,6 +16,7 @@ type Paths struct {
 	DevicesDir     string `yaml:"devices_dir"`
 	ThresholdsFile string `yaml:"thresholds_file"`
 	AdaptersFile   string `yaml:"adapters_file"`
+	QueueDB        string `yaml:"queue_db"`
 }
 
 // Device is loaded from `devices.d/*.yml`.

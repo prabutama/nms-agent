@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"nms-agent/internal/adapters"
 	"nms-agent/internal/collectors"
@@ -57,13 +58,29 @@ func run(args []string) int {
 	fmt.Fprintf(os.Stdout, "poll_interval: %s\n", loaded.Root.Agent.PollInterval)
 	fmt.Fprintf(os.Stdout, "devices: %d\n", len(loaded.Devices))
 	fmt.Fprintf(os.Stdout, "adapter.active: %s\n", loaded.Adapters.Adapters.Active)
+	fmt.Fprintf(os.Stdout, "queue.db: %s\n", loaded.Root.Paths.QueueDB)
 	fmt.Fprintln(os.Stdout)
+
+	queuePath := loaded.Root.Paths.QueueDB
+	queueDir := filepath.Dir(queuePath)
+	if queueDir != "." && queueDir != "" {
+		if err := os.MkdirAll(queueDir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "create queue dir %s: %v\n", queueDir, err)
+			return 1
+		}
+	}
+	q, err := queue.OpenSQLite(queuePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	defer q.Close()
 
 	// Phase 3: run a single demo pass through the pipeline using dummy components.
 	p := core.NewPipeline(
 		collectors.DummyCollector{DeviceID: firstDeviceID(loaded)},
 		processors.PassthroughProcessor{},
-		queue.NewMemoryQueue(),
+		q,
 		adapters.NewTerminalAdapter(),
 	)
 	if err := p.RunOnce(context.Background()); err != nil {

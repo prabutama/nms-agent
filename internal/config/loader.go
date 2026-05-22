@@ -68,6 +68,7 @@ func loadRoot(path string) (Root, error) {
 	root.Paths.DevicesDir = strings.TrimSpace(root.Paths.DevicesDir)
 	root.Paths.ThresholdsFile = strings.TrimSpace(root.Paths.ThresholdsFile)
 	root.Paths.AdaptersFile = strings.TrimSpace(root.Paths.AdaptersFile)
+	root.Paths.QueueDB = strings.TrimSpace(root.Paths.QueueDB)
 	return root, nil
 }
 

@@ -42,3 +42,9 @@ Backoff/TTL/deduplication are deferred to later tasks.
 ## Expected Downtime Behavior
 
 If the adapter is unavailable, items remain `pending` in SQLite and will be retried on the next run.
+
+## Runtime Wiring
+
+- The SQLite DB path is configured via `paths.queue_db` in `configs/agent.yml`.
+- At startup, the agent creates the parent directory of `queue_db` if it does not exist.
+- If directory creation fails, startup fails fast with a clear error.

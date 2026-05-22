@@ -452,4 +452,26 @@ Status update:
 - Phase 4: schema/enqueue/pending/delivered/retry/persistence test -> DONE
 Notes:
 - Queue port updated to use QueueItem IDs and MarkFailed for retry tracking.
+
+2026-05-22 02:20
+Task: Phase 4 wire SQLite queue into nms-agent runtime
+Changed files:
+- internal/config/types.go
+- internal/config/loader.go
+- internal/config/validate.go
+- configs/agent.yml
+- docs/CONFIG_SCHEMA.md
+- docs/QUEUE_DESIGN.md
+- cmd/nms-agent/main.go
+- internal/core/pipeline_sqlite_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+Status update:
+- Phase 4 runtime wiring -> DONE
+Notes:
+- Runtime auto-creates the queue DB parent directory only.
 ```

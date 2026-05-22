@@ -19,12 +19,14 @@ paths:
   devices_dir: devices.d
   thresholds_file: thresholds.yml
   adapters_file: adapters.yml
+  queue_db: data/queue/queue.db
 ```
 
 Notes:
 - `poll_interval` uses Go duration format (e.g. `10s`, `1m`).
 - `paths.*` may be relative to the directory containing `agent.yml`.
 - `${ENV_VAR}` expansion is supported for path strings via the current process environment.
+- `paths.queue_db` is the SQLite DB file path for the local durable queue. Its parent directory is created at runtime if missing.
 
 ## configs/devices.d/*.yml
 

@@ -17,6 +17,7 @@
 | `internal/adapters/port.go`    | Kontrak/interface untuk output adapter. ThingsBoard, Generic MQTT, Terminal, Zabbix, Prometheus harus mengikuti interface ini.                     |
 | `internal/adapters/terminal_adapter.go` | Terminal adapter Phase 3. Mencetak canonical telemetry ke stdout untuk debugging/demo.                                                   |
 | `internal/core/pipeline.go`    | Orchestrator atau pengatur alur utama. File ini menghubungkan collector, processor, queue, dan adapter sesuai flow agent.                          |
+| `internal/core/pipeline_sqlite_test.go` | Test integrasi pipeline+SQLite queue. Membuktikan data di-enqueue sebelum send dan tetap persist setelah restart.                      |
 | `configs/agent.yml`            | Contoh konfigurasi utama agent (MVP). Mendefinisikan interval polling dan path file konfigurasi lainnya.                                           |
 | `configs/devices.d/example-router.yml` | Contoh inventory device (MVP). Berisi `id`, `address`, dan metadata vendor/model untuk fase berikutnya.                                     |
 | `configs/thresholds.yml`       | Placeholder konfigurasi threshold (Phase 7). Di Phase 2 hanya diload dan dicek struktur top-level key.                                            |
