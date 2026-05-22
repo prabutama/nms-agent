@@ -5,6 +5,7 @@ import (
 
 	"nms-agent/internal/adapters"
 	"nms-agent/internal/collectors"
+	"nms-agent/internal/models"
 	"nms-agent/internal/processors"
 	"nms-agent/internal/queue"
 )
@@ -56,10 +57,18 @@ func (p *Pipeline) RunOnce(ctx context.Context) error {
 		return nil
 	}
 
-	if err := p.adapter.SendBatch(ctx, pending); err != nil {
-		// Delivery failed: leave data pending for retry.
+	ids := make([]string, 0, len(pending))
+	batch := make([]models.Telemetry, 0, len(pending))
+	for _, it := range pending {
+		ids = append(ids, it.ID)
+		batch = append(batch, it.Telemetry)
+	}
+
+	if err := p.adapter.SendBatch(ctx, batch); err != nil {
+		// Delivery failed: keep data pending and increment retry count.
+		_ = p.queue.MarkFailed(ctx, ids, err.Error())
 		return err
 	}
 
-	return p.queue.MarkDelivered(ctx, pending)
+	return p.queue.MarkDelivered(ctx, ids)
 }

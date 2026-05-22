@@ -2,7 +2,9 @@ package queue
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"time"
 
 	"nms-agent/internal/models"
 )
@@ -11,7 +13,8 @@ import (
 // It is not durable and is not safe for multi-process usage.
 type MemoryQueue struct {
 	mu   sync.Mutex
-	data []models.Telemetry
+	data []QueueItem
+	next int
 }
 
 func NewMemoryQueue() *MemoryQueue {
@@ -21,31 +24,65 @@ func NewMemoryQueue() *MemoryQueue {
 func (q *MemoryQueue) EnqueueBatch(ctx context.Context, batch []models.Telemetry) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.data = append(q.data, batch...)
+	for _, t := range batch {
+		q.next++
+		q.data = append(q.data, QueueItem{
+			ID:         fmt.Sprintf("mem-%d", q.next),
+			Telemetry:  t,
+			RetryCount: 0,
+			CreatedAt:  time.Now().UTC(),
+		})
+	}
 	return nil
 }
 
-func (q *MemoryQueue) PendingBatch(ctx context.Context, limit int) ([]models.Telemetry, error) {
+func (q *MemoryQueue) PendingBatch(ctx context.Context, limit int) ([]QueueItem, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if limit <= 0 || limit > len(q.data) {
 		limit = len(q.data)
 	}
-	out := make([]models.Telemetry, limit)
+	out := make([]QueueItem, limit)
 	copy(out, q.data[:limit])
 	return out, nil
 }
 
-func (q *MemoryQueue) MarkDelivered(ctx context.Context, delivered []models.Telemetry) error {
+func (q *MemoryQueue) MarkDelivered(ctx context.Context, ids []string) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if len(delivered) == 0 {
+	if len(ids) == 0 {
 		return nil
 	}
-	if len(delivered) >= len(q.data) {
-		q.data = nil
+	toDelete := map[string]struct{}{}
+	for _, id := range ids {
+		toDelete[id] = struct{}{}
+	}
+	out := q.data[:0]
+	for _, it := range q.data {
+		if _, ok := toDelete[it.ID]; ok {
+			continue
+		}
+		out = append(out, it)
+	}
+	q.data = out
+	return nil
+}
+
+func (q *MemoryQueue) MarkFailed(ctx context.Context, ids []string, reason string) error {
+	_ = reason
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(ids) == 0 {
 		return nil
 	}
-	q.data = q.data[len(delivered):]
+	set := map[string]struct{}{}
+	for _, id := range ids {
+		set[id] = struct{}{}
+	}
+	for i := range q.data {
+		if _, ok := set[q.data[i].ID]; ok {
+			q.data[i].RetryCount++
+		}
+	}
 	return nil
 }

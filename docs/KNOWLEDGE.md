@@ -12,6 +12,8 @@
 | `internal/processors/passthrough_processor.go` | Processor Phase 3 (passthrough). Memetakan RawSample dummy menjadi canonical telemetry sederhana.                               |
 | `internal/queue/port.go`       | Kontrak/interface untuk local queue. Nantinya implementasi SQLite store-and-forward harus mengikuti interface ini.                                 |
 | `internal/queue/memory_queue.go` | Queue stub Phase 3 (in-memory). Untuk demo store-and-forward tanpa SQLite (tidak durable).                                                   |
+| `internal/queue/sqlite_queue.go` | Implementasi queue durable Phase 4A berbasis SQLite. Menyimpan telemetry sebagai JSON dan melacak retry_count.                                |
+| `internal/queue/sqlite_queue_test.go` | Test queue SQLite: memastikan data persist setelah restart + retry_count bertambah via MarkFailed.                                      |
 | `internal/adapters/port.go`    | Kontrak/interface untuk output adapter. ThingsBoard, Generic MQTT, Terminal, Zabbix, Prometheus harus mengikuti interface ini.                     |
 | `internal/adapters/terminal_adapter.go` | Terminal adapter Phase 3. Mencetak canonical telemetry ke stdout untuk debugging/demo.                                                   |
 | `internal/core/pipeline.go`    | Orchestrator atau pengatur alur utama. File ini menghubungkan collector, processor, queue, dan adapter sesuai flow agent.                          |

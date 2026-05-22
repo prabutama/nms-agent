@@ -124,15 +124,15 @@ For every implementation task, the AI coding agent must:
 
 | Task | Target Output | Status | Notes |
 |---|---|---|---|
-| Design SQLite schema | Queue table exists | TODO | Update `QUEUE_DESIGN.md` |
-| Implement enqueue | Telemetry is stored before send | TODO | |
-| Implement pending list | Worker can read pending data | TODO | |
-| Implement mark sent/delete | Sent data is marked or deleted | TODO | |
-| Implement retry count | Retry attempts are tracked | TODO | |
+| Design SQLite schema | Queue table exists | DONE | `queue_items` schema in `QUEUE_DESIGN.md` |
+| Implement enqueue | Telemetry is stored before send | DONE | SQLite insert, JSON payload |
+| Implement pending list | Worker can read pending data | DONE | Oldest-first pending reads |
+| Implement mark sent/delete | Sent data is marked or deleted | DONE | Delete by queue item IDs |
+| Implement retry count | Retry attempts are tracked | DONE | `MarkFailed` increments `retry_count` |
 | Implement TTL cleanup | Old data can expire | TODO | |
 | Add queue status CLI | `nms-agentctl queue status` | TODO | |
 | Add retry CLI | `nms-agentctl queue retry` | TODO | |
-| Add queue persistence test | Data survives service restart | TODO | |
+| Add queue persistence test | Data survives service restart | DONE | Unit tests for restart persistence |
 
 **Exit Criteria:**
 
@@ -429,4 +429,27 @@ Status update:
 - Validation can be run via `make` in Windows and non-Windows environments.
 Notes:
 - On Windows, PowerShell does not have GNU make by default; `make.bat` provides equivalent targets.
+
+2026-05-22 02:05
+Task: Phase 4A SQLite queue core
+Changed files:
+- internal/queue/port.go
+- internal/queue/memory_queue.go
+- internal/queue/sqlite_queue.go
+- internal/queue/sqlite_queue_test.go
+- internal/core/pipeline.go
+- go.mod
+- go.sum
+- docs/QUEUE_DESIGN.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+Status update:
+- Phase 4: schema/enqueue/pending/delivered/retry/persistence test -> DONE
+Notes:
+- Queue port updated to use QueueItem IDs and MarkFailed for retry tracking.
 ```
