@@ -1,0 +1,6 @@
+- SQLite schema
+- queue status
+- retry policy
+- TTL
+- deduplication event_id
+- expected downtime behavior

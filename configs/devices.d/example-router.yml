@@ -1,0 +1,6 @@
+id: router-1
+address: 192.0.2.1
+
+# Device metadata (future use for profiles/collectors).
+vendor: example
+model: example-router

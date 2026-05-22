@@ -1,0 +1,3 @@
+# Threshold rules are a later phase. This file exists so config loading/validation
+# has a stable path and can evolve without changing the loader contract.
+thresholds: []

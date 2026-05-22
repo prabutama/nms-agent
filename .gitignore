@@ -1,0 +1,10 @@
+bin/
+dist/
+tmp/
+*.db
+*.log
+.env
+agent.env
+
+.serena/
+.opencode/node_modules/

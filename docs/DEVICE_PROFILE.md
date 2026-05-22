@@ -1,0 +1,5 @@
+- standard OID
+- vendor-specific OID
+- profile-based partial hybrid strategy
+- discovery/cache behavior
+- profile YAML format
