@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 
 	_ "modernc.org/sqlite"
 
@@ -185,8 +186,6 @@ func execInTx(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
 }
 
 func newQueueID() string {
-	// Small, dependency-free ID: RFC3339Nano timestamp + monotonic entropy from time.
-	// Good enough for local queue; can be replaced with UUID later if needed.
-	n := time.Now().UTC().Format("20060102T150405.000000000Z07")
-	return fmt.Sprintf("q-%s-%d", n, time.Now().UnixNano())
+	// UUID avoids time-resolution collisions under high-frequency enqueue.
+	return "q-" + uuid.NewString()
 }

@@ -35,11 +35,17 @@ id: router-1
 address: 192.0.2.1
 vendor: example
 model: example-router
+
+icmp:
+  enabled: true
+snmp:
+  enabled: true
 ```
 
 Notes:
 - `id` must be unique.
 - `address` is a host/IP string (protocol-specific validation is deferred).
+- `icmp.enabled` and `snmp.enabled` toggle which real collectors are used in `--collector-mode auto|real`.
 
 ## configs/thresholds.yml (placeholder)
 

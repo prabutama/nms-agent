@@ -17,7 +17,6 @@ func Validate(cfg Loaded) error {
 	if cfg.Root.Agent.PollInterval <= 0 {
 		errs = append(errs, "agent.poll_interval must be > 0")
 	}
-
 	// Paths fields should be present in agent.yml.
 	if strings.TrimSpace(cfg.Root.Paths.DevicesDir) == "" {
 		errs = append(errs, "paths.devices_dir is required")
@@ -48,6 +47,7 @@ func Validate(cfg Loaded) error {
 		if strings.TrimSpace(d.Address) == "" {
 			errs = append(errs, prefix+".address is required")
 		}
+		// Collector enable flags are optional; no strict validation yet.
 	}
 
 	// Adapters config: keep minimal but ensure it parses and has an active name.

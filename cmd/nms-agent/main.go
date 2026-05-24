@@ -11,6 +11,7 @@ import (
 	"nms-agent/internal/collectors"
 	"nms-agent/internal/config"
 	"nms-agent/internal/core"
+	"nms-agent/internal/models"
 	"nms-agent/internal/processors"
 	"nms-agent/internal/queue"
 )
@@ -39,6 +40,7 @@ func run(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	collectorMode := fs.String("collector-mode", "auto", "Collector mode: auto|dummy|real")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -59,6 +61,7 @@ func run(args []string) int {
 	fmt.Fprintf(os.Stdout, "devices: %d\n", len(loaded.Devices))
 	fmt.Fprintf(os.Stdout, "adapter.active: %s\n", loaded.Adapters.Adapters.Active)
 	fmt.Fprintf(os.Stdout, "queue.db: %s\n", loaded.Root.Paths.QueueDB)
+	fmt.Fprintf(os.Stdout, "collector.mode: %s\n", *collectorMode)
 	fmt.Fprintln(os.Stdout)
 
 	queuePath := loaded.Root.Paths.QueueDB
@@ -76,9 +79,14 @@ func run(args []string) int {
 	}
 	defer q.Close()
 
-	// Phase 3: run a single demo pass through the pipeline using dummy components.
+	coll, err := buildCollector(*collectorMode, loaded)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+
 	p := core.NewPipeline(
-		collectors.DummyCollector{DeviceID: firstDeviceID(loaded)},
+		coll,
 		processors.PassthroughProcessor{},
 		q,
 		adapters.NewTerminalAdapter(),
@@ -88,6 +96,64 @@ func run(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func buildCollector(mode string, loaded config.Loaded) (collectors.Collector, error) {
+	switch mode {
+	case "auto", "dummy", "real":
+		// ok
+	default:
+		return nil, fmt.Errorf("invalid --collector-mode %q (expected auto|dummy|real)", mode)
+	}
+
+	icmpTargets, snmpTargets := buildTargets(loaded)
+	hasRealTargets := len(icmpTargets) > 0 || len(snmpTargets) > 0
+
+	if mode == "dummy" || (mode == "auto" && !hasRealTargets) {
+		return collectors.DummyCollector{DeviceID: firstDeviceID(loaded)}, nil
+	}
+	if mode == "real" && !hasRealTargets {
+		return nil, fmt.Errorf("collector-mode=real but no real targets enabled (set devices.d/*.yml icmp.enabled or snmp.enabled)")
+	}
+
+	// real or auto-with-targets: combine enabled collectors.
+	colList := make([]collectors.Collector, 0, 2)
+	if len(icmpTargets) > 0 {
+		colList = append(colList, collectors.ICMPCollector{Targets: icmpTargets, Count: 2})
+	}
+	if len(snmpTargets) > 0 {
+		colList = append(colList, collectors.SNMPCollector{Targets: snmpTargets})
+	}
+	return combinedCollector{collectors: colList}, nil
+}
+
+func buildTargets(loaded config.Loaded) (icmp []collectors.Target, snmp []collectors.Target) {
+	for _, d := range loaded.Devices {
+		t := collectors.Target{DeviceID: d.ID, Address: d.Address}
+		if d.ICMP.Enabled {
+			icmp = append(icmp, t)
+		}
+		if d.SNMP.Enabled {
+			snmp = append(snmp, t)
+		}
+	}
+	return icmp, snmp
+}
+
+type combinedCollector struct {
+	collectors []collectors.Collector
+}
+
+func (c combinedCollector) Collect(ctx context.Context) ([]models.RawSample, error) {
+	var out []models.RawSample
+	for _, col := range c.collectors {
+		batch, err := col.Collect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, batch...)
+	}
+	return out, nil
 }
 
 func firstDeviceID(cfg config.Loaded) string {

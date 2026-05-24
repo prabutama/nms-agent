@@ -103,3 +103,38 @@ func TestSQLiteQueue_MarkFailedIncrementsRetry(t *testing.T) {
 		t.Fatalf("expected retry 1, got %d", items2[0].RetryCount)
 	}
 }
+
+func TestSQLiteQueue_EnqueueBatch_GeneratesUniqueIDs(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "queue.db")
+
+	q, err := OpenSQLite(dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	defer q.Close()
+
+	ctx := context.Background()
+	batch := make([]models.Telemetry, 0, 200)
+	for i := 0; i < 200; i++ {
+		batch = append(batch, models.Telemetry{DeviceID: "d1", Metric: "m", TS: time.Now().UTC(), Value: float64(i)})
+	}
+	if err := q.EnqueueBatch(ctx, batch); err != nil {
+		t.Fatalf("EnqueueBatch: %v", err)
+	}
+
+	items, err := q.PendingBatch(ctx, 300)
+	if err != nil {
+		t.Fatalf("PendingBatch: %v", err)
+	}
+	if len(items) != 200 {
+		t.Fatalf("expected 200 items, got %d", len(items))
+	}
+	seen := map[string]struct{}{}
+	for _, it := range items {
+		if _, ok := seen[it.ID]; ok {
+			t.Fatalf("duplicate id: %s", it.ID)
+		}
+		seen[it.ID] = struct{}{}
+	}
+}

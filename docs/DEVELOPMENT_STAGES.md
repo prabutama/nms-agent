@@ -130,8 +130,8 @@ For every implementation task, the AI coding agent must:
 | Implement mark sent/delete | Sent data is marked or deleted | DONE | Delete by queue item IDs |
 | Implement retry count | Retry attempts are tracked | DONE | `MarkFailed` increments `retry_count` |
 | Implement TTL cleanup | Old data can expire | TODO | |
-| Add queue status CLI | `nms-agentctl queue status` | TODO | |
-| Add retry CLI | `nms-agentctl queue retry` | TODO | |
+| Add queue status CLI | `nms-agentctl queue status` | DONE | Prints pending count and max retry_count |
+| Add retry CLI | `nms-agentctl queue retry` | DONE | Retries pending batch and ACKs by IDs |
 | Add queue persistence test | Data survives service restart | DONE | Unit tests for restart persistence |
 
 **Exit Criteria:**
@@ -149,11 +149,11 @@ For every implementation task, the AI coding agent must:
 
 | Task | Target Output | Status | Notes |
 |---|---|---|---|
-| Implement ICMP collector | Reachability, latency, packet loss, jitter | TODO | |
-| Implement basic SNMP collector | Uptime, interface status, traffic | TODO | |
-| Add timeout handling | Slow devices do not block other polling tasks | TODO | |
-| Add partial snapshot behavior | Valid data is still processed when some metrics fail | TODO | |
-| Add collector tests | Basic unit/integration tests | TODO | |
+| Implement ICMP collector | Reachability, latency, packet loss, jitter | DONE | Uses system `ping` with parse + jitter (peak-to-peak) |
+| Implement basic SNMP collector | Uptime, interface status, traffic | DONE | GoSNMP: sysUpTime + ifOperStatus + ifHC octets |
+| Add timeout handling | Slow devices do not block other polling tasks | DONE | Per-target timeouts and ctx-aware bounds |
+| Add partial snapshot behavior | Valid data is still processed when some metrics fail | DONE | Best-effort parse/walk; does not fail whole pass |
+| Add collector tests | Basic unit/integration tests | DONE | Unit tests with injected exec/fake SNMP client |
 
 **Exit Criteria:**
 
@@ -474,4 +474,102 @@ Status update:
 - Phase 4 runtime wiring -> DONE
 Notes:
 - Runtime auto-creates the queue DB parent directory only.
+
+2026-05-22 02:35
+Task: Phase 4 queue status CLI
+Changed files:
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/queue_status.go
+- internal/queue/sqlite_queue_stats.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+Status update:
+- Phase 4: queue status CLI -> DONE
+Notes:
+- Command reads `paths.queue_db` from config and prints stable one-line output.
+
+2026-05-22 02:55
+Task: Phase 4 queue retry CLI
+Changed files:
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/queue_retry.go
+- cmd/nms-agentctl/queue_retry_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+Status update:
+- Phase 4: retry CLI -> DONE
+Notes:
+- Current adapter support: terminal only (others will error as not implemented).
+
+2026-05-22 03:05
+Task: Update FLOW diagram (queue status + retry paths)
+Changed files:
+- docs/FLOW.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+Status update:
+- Docs: FLOW diagram reflects current CLI and retry behavior.
+Notes:
+- Diagram now includes `nms-agentctl queue retry` and routes CLI commands through config load/validate.
+
+2026-05-23 09:10
+Task: Phase 5 ICMP + SNMP collectors (MVP)
+Changed files:
+- internal/collectors/targets.go
+- internal/collectors/icmp_collector.go
+- internal/collectors/icmp_collector_test.go
+- internal/collectors/snmp_collector.go
+- internal/collectors/snmp_collector_test.go
+- internal/processors/passthrough_processor.go
+- go.mod
+- go.sum
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+Status update:
+- Phase 5: ICMP/SNMP/timeout/partial snapshot/tests -> DONE
+Notes:
+- ICMP collector uses system `ping` for unprivileged portability.
+- SNMP collector uses GoSNMP for sysUpTime + basic interface metrics.
+
+2026-05-23 09:40
+Task: Phase 5 wire ICMP/SNMP collectors into runtime
+Changed files:
+- cmd/nms-agent/main.go
+- internal/config/types.go
+- internal/config/validate.go
+- configs/devices.d/example-router.yml
+- docs/CONFIG_SCHEMA.md
+- docs/FLOW.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+- go run ./cmd/nms-agent run --config configs/agent.yml --collector-mode dummy
+- go run ./cmd/nms-agent run --config configs/agent.yml --collector-mode auto
+Status update:
+- Phase 5: runtime wiring -> DONE
+Notes:
+- `--collector-mode auto|dummy|real` selects Dummy vs combined ICMP/SNMP collectors.
 ```

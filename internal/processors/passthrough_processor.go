@@ -37,6 +37,14 @@ func (PassthroughProcessor) Normalize(ctx context.Context, raw []models.RawSampl
 		if unit, _ := r.Fields["unit"].(string); unit != "" {
 			tags["unit"] = unit
 		}
+		if extra, ok := r.Fields["tags"].(map[string]string); ok {
+			for k, v := range extra {
+				if k == "" || v == "" {
+					continue
+				}
+				tags[k] = v
+			}
+		}
 		if r.Source != "" {
 			tags["source"] = r.Source
 		}

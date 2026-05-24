@@ -1,6 +1,13 @@
 id: router-1
-address: 192.0.2.1
+address: 10.10.10.1
 
 # Device metadata (future use for profiles/collectors).
 vendor: example
 model: example-router
+
+# Enable real collectors (Phase 5 runtime selection).
+icmp:
+  enabled: true
+snmp:
+  enabled: false
+  

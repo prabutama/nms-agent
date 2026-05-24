@@ -23,9 +23,19 @@ type Paths struct {
 type Device struct {
 	ID      string `yaml:"id"`
 	Address string `yaml:"address"`
+	Vendor  string `yaml:"vendor"`
+	Model   string `yaml:"model"`
 
-	Vendor string `yaml:"vendor"`
-	Model  string `yaml:"model"`
+	SNMP DeviceSNMP `yaml:"snmp"`
+	ICMP DeviceICMP `yaml:"icmp"`
+}
+
+type DeviceSNMP struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+type DeviceICMP struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 // ThresholdsConfig is a placeholder shape for Phase 2 (no behavior yet).
