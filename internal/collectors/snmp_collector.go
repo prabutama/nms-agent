@@ -7,12 +7,14 @@ import (
 	g "github.com/gosnmp/gosnmp"
 
 	"nms-agent/internal/models"
+	"nms-agent/internal/profiles"
 )
 
 // SNMPCollector collects a minimal set of SNMP metrics (Phase 5 MVP).
 // It returns one RawSample per metric to keep the processor contract stable.
 type SNMPCollector struct {
-	Targets []Target
+	Targets  []Target
+	Profiles []profiles.Profile
 
 	Community string
 	Version   g.SnmpVersion
@@ -67,6 +69,10 @@ func (c SNMPCollector) Collect(ctx context.Context) ([]models.RawSample, error) 
 	if newClient == nil {
 		newClient = defaultSNMPClient
 	}
+	profs := c.Profiles
+	if len(profs) == 0 {
+		return nil, nil
+	}
 
 	deadlineTo := to
 	if dl, ok := ctx.Deadline(); ok {
@@ -79,6 +85,10 @@ func (c SNMPCollector) Collect(ctx context.Context) ([]models.RawSample, error) 
 	out := make([]models.RawSample, 0, len(c.Targets))
 	for _, t := range c.Targets {
 		if t.DeviceID == "" || t.Address == "" {
+			continue
+		}
+		profile, ok := profiles.SelectProfile(profs, t.Vendor, t.Model)
+		if !ok {
 			continue
 		}
 		cli := newClient(t, snmpClientConfig{
@@ -95,63 +105,43 @@ func (c SNMPCollector) Collect(ctx context.Context) ([]models.RawSample, error) 
 			}
 			defer func() { _ = cli.Close() }()
 
-			// Uptime.
-			pkt, err := cli.Get([]string{oidSysUpTime0})
-			if err == nil {
-				for _, v := range pkt.Variables {
-					if v.Name != oidSysUpTime0 {
+			for _, m := range profile.Metrics {
+				if m.Type == "get" {
+					pkt, err := cli.Get([]string{m.OID})
+					if err != nil {
 						continue
 					}
-					secs, ok := timeTicksToSeconds(v)
-					if !ok {
-						continue
+					for _, v := range pkt.Variables {
+						val, ok := pduToFloat(v)
+						if !ok {
+							continue
+						}
+						out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, val, m.Unit, nil))
 					}
-					out = append(out, rawMetric(t.DeviceID, "snmp", now, "snmp.uptime_seconds", secs, "s"))
+					continue
+				}
+
+				if m.Type == "walk" {
+					_ = cli.Walk(m.OID, func(p g.SnmpPDU) error {
+						val, ok := pduToFloat(p)
+						if !ok {
+							return nil
+						}
+						var tags map[string]string
+						if m.Index {
+							if idx, ok := oidIndexSuffix(p.Name); ok {
+								tags = map[string]string{"ifIndex": idx}
+							}
+						}
+						out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, val, m.Unit, tags))
+						return nil
+					})
 				}
 			}
-
-			// Interface oper status.
-			_ = cli.Walk(oidIfOperStatus, func(p g.SnmpPDU) error {
-				idx, ok := oidIndexSuffix(p.Name)
-				if !ok {
-					return nil
-				}
-				v := float64(g.ToBigInt(p.Value).Int64())
-				out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, "snmp.if.oper_status", v, "", map[string]string{"ifIndex": idx}))
-				return nil
-			})
-
-			// Interface traffic counters (64-bit if available).
-			_ = cli.Walk(oidIfHCInOctets, func(p g.SnmpPDU) error {
-				idx, ok := oidIndexSuffix(p.Name)
-				if !ok {
-					return nil
-				}
-				v := float64(g.ToBigInt(p.Value).Int64())
-				out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, "snmp.if.in_octets", v, "octets", map[string]string{"ifIndex": idx}))
-				return nil
-			})
-			_ = cli.Walk(oidIfHCOutOctets, func(p g.SnmpPDU) error {
-				idx, ok := oidIndexSuffix(p.Name)
-				if !ok {
-					return nil
-				}
-				v := float64(g.ToBigInt(p.Value).Int64())
-				out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, "snmp.if.out_octets", v, "octets", map[string]string{"ifIndex": idx}))
-				return nil
-			})
 		}()
 	}
 	return out, nil
 }
-
-const oidSysUpTime0 = "1.3.6.1.2.1.1.3.0"
-
-const (
-	oidIfOperStatus  = "1.3.6.1.2.1.2.2.1.8"
-	oidIfHCInOctets  = "1.3.6.1.2.1.31.1.1.1.6"
-	oidIfHCOutOctets = "1.3.6.1.2.1.31.1.1.1.10"
-)
 
 func defaultSNMPClient(t Target, cfg snmpClientConfig) snmpClient {
 	gs := &g.GoSNMP{
@@ -187,6 +177,18 @@ func timeTicksToSeconds(pdu g.SnmpPDU) (float64, bool) {
 	}
 	// hundredths of seconds -> seconds
 	return float64(bi.Int64()) / 100.0, true
+}
+
+func pduToFloat(pdu g.SnmpPDU) (float64, bool) {
+	// Prefer TimeTicks conversion when available.
+	if pdu.Type == g.TimeTicks {
+		return timeTicksToSeconds(pdu)
+	}
+	bi := g.ToBigInt(pdu.Value)
+	if bi == nil {
+		return 0, false
+	}
+	return float64(bi.Int64()), true
 }
 
 func oidIndexSuffix(oid string) (string, bool) {

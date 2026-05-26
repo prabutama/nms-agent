@@ -169,11 +169,11 @@ For every implementation task, the AI coding agent must:
 
 | Task | Target Output | Status | Notes |
 |---|---|---|---|
-| Define standard profile | Standard OIDs for interface and uptime | TODO | Update `DEVICE_PROFILE.md` |
-| Define vendor profile format | YAML profile for vendor-specific metrics | TODO | |
-| Implement profile loader | Load profiles from `profiles/` | TODO | |
-| Implement profile-based polling | Standard OID for common metrics, vendor OID for specific metrics | TODO | |
-| Add profile validation | Validate OID and metric names | TODO | |
+| Define standard profile | Standard OIDs for interface and uptime | DONE | `profiles/standard.yml` |
+| Define vendor profile format | YAML profile for vendor-specific metrics | DONE | `profiles/vendor-example.yml` |
+| Implement profile loader | Load profiles from `profiles/` | DONE | `internal/profiles/loader.go` |
+| Implement profile-based polling | Standard OID for common metrics, vendor OID for specific metrics | DONE | SNMP collector uses profile metrics |
+| Add profile validation | Validate OID and metric names | DONE | `internal/profiles/validate.go` |
 | Add profile cache | Avoid repeated vendor/profile detection on every polling cycle | TODO | Optional for MVP |
 
 **Exit Criteria:**
@@ -572,4 +572,32 @@ Status update:
 - Phase 5: runtime wiring -> DONE
 Notes:
 - `--collector-mode auto|dummy|real` selects Dummy vs combined ICMP/SNMP collectors.
+
+2026-05-23 11:20
+Task: Phase 6 device profile MVP (no cache)
+Changed files:
+- internal/profiles/types.go
+- internal/profiles/loader.go
+- internal/profiles/validate.go
+- internal/profiles/loader_test.go
+- internal/profiles/validate_test.go
+- profiles/standard.yml
+- profiles/vendor-example.yml
+- internal/collectors/targets.go
+- internal/collectors/snmp_collector.go
+- internal/collectors/snmp_collector_test.go
+- cmd/nms-agent/main.go
+- docs/DEVICE_PROFILE.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+- go run ./cmd/nms-agent run --config configs/agent.yml --collector-mode real
+Status update:
+- Phase 6: profile schema/loader/validation/polling -> DONE
+Notes:
+- Profiles are loaded from `profiles/` and selected by vendor/model precedence.
 ```

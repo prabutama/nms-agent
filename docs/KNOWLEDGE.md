@@ -13,6 +13,11 @@
 | `internal/collectors/icmp_collector_test.go` | Unit test ICMP collector: parse output ping + partial snapshot saat error.                                                                |
 | `internal/collectors/snmp_collector.go` | SNMP collector Phase 5 (MVP) menggunakan GoSNMP: uptime, ifOperStatus, dan counter octets per interface.                                     |
 | `internal/collectors/snmp_collector_test.go` | Unit test SNMP collector dengan fake client: uptime + walk interface metrics.                                                             |
+| `internal/profiles/types.go` | Definisi domain profile SNMP (match vendor/model dan daftar metrics OID).                                                                           |
+| `internal/profiles/loader.go` | Loader YAML untuk membaca profile dari direktori `profiles/`.                                                                                   |
+| `internal/profiles/validate.go` | Validasi profile: OID/metric duplikat dan standar profile wajib.                                                                              |
+| `internal/profiles/loader_test.go` | Unit test loader profile YAML.                                                                                                             |
+| `internal/profiles/validate_test.go` | Unit test validasi profile + precedence pemilihan profile.                                                                                 |
 | `internal/processors/port.go`  | Kontrak/interface untuk preprocessing dan normalization. Misalnya hitung throughput, latency, packet loss, jitter, lalu ubah ke telemetry standar. |
 | `internal/processors/passthrough_processor.go` | Processor Phase 3 (passthrough). Memetakan RawSample dummy menjadi canonical telemetry sederhana.                               |
 | `internal/queue/port.go`       | Kontrak/interface untuk local queue. Nantinya implementasi SQLite store-and-forward harus mengikuti interface ini.                                 |
@@ -28,6 +33,8 @@
 | `configs/devices.d/example-router.yml` | Contoh inventory device (MVP) termasuk toggle collector `icmp.enabled` / `snmp.enabled` untuk Phase 5.                                          |
 | `configs/thresholds.yml`       | Placeholder konfigurasi threshold (Phase 7). Di Phase 2 hanya diload dan dicek struktur top-level key.                                            |
 | `configs/adapters.yml`         | Placeholder konfigurasi adapter (Phase 8). Di Phase 2 hanya diload dan dicek struktur top-level key.                                              |
+| `profiles/standard.yml`        | Profile SNMP standar (uptime + interface metrics) untuk semua device.                                                                           |
+| `profiles/vendor-example.yml`  | Contoh profile vendor default untuk `vendor: example`.                                                                                          |
 | `internal/config/types.go`     | Definisi struct config (root agent.yml, device entry, placeholders thresholds/adapters) untuk YAML loader dan validasi.                            |
 | `internal/config/loader.go`    | Loader konfigurasi YAML. Membaca `agent.yml`, memuat `devices.d/*.yml`, thresholds, adapters, dan resolve path dengan `filepath`.                   |
 | `internal/config/validate.go`  | Validasi dasar konfigurasi (field wajib, duplikasi device id, dan sanity-check struktur YAML thresholds/adapters).                                 |

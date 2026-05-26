@@ -7,6 +7,8 @@ import (
 	"time"
 
 	g "github.com/gosnmp/gosnmp"
+
+	"nms-agent/internal/profiles"
 )
 
 type fakeSNMPClient struct {
@@ -28,7 +30,15 @@ func (f fakeSNMPClient) Walk(root string, fn g.WalkFunc) error {
 
 func TestSNMPCollector_EmitsUptimeSeconds(t *testing.T) {
 	c := SNMPCollector{
-		Targets:   []Target{{DeviceID: "d1", Address: "127.0.0.1"}},
+		Targets: []Target{{DeviceID: "d1", Address: "127.0.0.1", Vendor: "example", Model: "router"}},
+		Profiles: []profiles.Profile{{
+			Name:  "standard",
+			Match: profiles.Match{},
+			Metrics: []profiles.Metric{{Metric: "snmp.uptime_seconds", OID: "1.3.6.1.2.1.1.3.0", Type: "get", Unit: "s"},
+				{Metric: "snmp.if.oper_status", OID: "1.3.6.1.2.1.2.2.1.8", Type: "walk", Index: true},
+				{Metric: "snmp.if.in_octets", OID: "1.3.6.1.2.1.31.1.1.1.6", Type: "walk", Unit: "octets", Index: true},
+				{Metric: "snmp.if.out_octets", OID: "1.3.6.1.2.1.31.1.1.1.10", Type: "walk", Unit: "octets", Index: true}},
+		}},
 		Community: "public",
 		Timeout:   200 * time.Millisecond,
 		Retries:   1,
@@ -36,17 +46,17 @@ func TestSNMPCollector_EmitsUptimeSeconds(t *testing.T) {
 			_ = t
 			_ = cfg
 			return fakeSNMPClient{packet: &g.SnmpPacket{Variables: []g.SnmpPDU{{
-				Name:  oidSysUpTime0,
+				Name:  "1.3.6.1.2.1.1.3.0",
 				Type:  g.TimeTicks,
 				Value: uint32(12345), // 123.45 seconds
 			}}}, walkFn: func(root string, fn g.WalkFunc) error {
 				// One interface index=1 sample for each walked OID.
 				switch root {
-				case oidIfOperStatus:
+				case "1.3.6.1.2.1.2.2.1.8":
 					return fn(g.SnmpPDU{Name: root + ".1", Type: g.Integer, Value: int(1)})
-				case oidIfHCInOctets:
+				case "1.3.6.1.2.1.31.1.1.1.6":
 					return fn(g.SnmpPDU{Name: root + ".1", Type: g.Counter64, Value: uint64(10)})
-				case oidIfHCOutOctets:
+				case "1.3.6.1.2.1.31.1.1.1.10":
 					return fn(g.SnmpPDU{Name: root + ".1", Type: g.Counter64, Value: uint64(20)})
 				default:
 					return nil

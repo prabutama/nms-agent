@@ -5,4 +5,6 @@ package collectors
 type Target struct {
 	DeviceID string
 	Address  string
+	Vendor   string
+	Model    string
 }

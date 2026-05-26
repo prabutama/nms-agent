@@ -13,6 +13,7 @@ import (
 	"nms-agent/internal/core"
 	"nms-agent/internal/models"
 	"nms-agent/internal/processors"
+	"nms-agent/internal/profiles"
 	"nms-agent/internal/queue"
 )
 
@@ -85,6 +86,35 @@ func run(args []string) int {
 		return 1
 	}
 
+	configAbs, err := filepath.Abs(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	profilesDir := filepath.Join(filepath.Dir(configAbs), "..", "profiles")
+	profs, err := profiles.LoadDir(filepath.Clean(profilesDir))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	if err := profiles.ValidateAll(profs); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+
+	if sc, ok := coll.(collectors.SNMPCollector); ok {
+		sc.Profiles = profs
+		coll = sc
+	} else if cc, ok := coll.(combinedCollector); ok {
+		for i, c := range cc.collectors {
+			if sc, ok := c.(collectors.SNMPCollector); ok {
+				sc.Profiles = profs
+				cc.collectors[i] = sc
+			}
+		}
+		coll = cc
+	}
+
 	p := core.NewPipeline(
 		coll,
 		processors.PassthroughProcessor{},
@@ -129,7 +159,7 @@ func buildCollector(mode string, loaded config.Loaded) (collectors.Collector, er
 
 func buildTargets(loaded config.Loaded) (icmp []collectors.Target, snmp []collectors.Target) {
 	for _, d := range loaded.Devices {
-		t := collectors.Target{DeviceID: d.ID, Address: d.Address}
+		t := collectors.Target{DeviceID: d.ID, Address: d.Address, Vendor: d.Vendor, Model: d.Model}
 		if d.ICMP.Enabled {
 			icmp = append(icmp, t)
 		}
