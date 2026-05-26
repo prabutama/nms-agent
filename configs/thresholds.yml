@@ -1,3 +1,22 @@
 # Threshold rules are a later phase. This file exists so config loading/validation
 # has a stable path and can evolve without changing the loader contract.
-thresholds: []
+thresholds:
+  - metric: icmp.latency_ms
+    operator: ">"
+    warning: 50
+    critical: 100
+    tags:
+      source: icmp
+
+  - metric: icmp.packet_loss_pct
+    operator: ">"
+    warning: 1
+    critical: 5
+    tags:
+      source: icmp
+
+  - metric: snmp.if.oper_status
+    operator: "=="
+    warning: 2
+    tags:
+      ifIndex: "*"

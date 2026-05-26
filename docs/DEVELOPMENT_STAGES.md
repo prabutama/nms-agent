@@ -192,10 +192,10 @@ For every implementation task, the AI coding agent must:
 |---|---|---|---|
 | Implement throughput calculation | Interface counter → throughput | TODO | |
 | Implement metric normalization | Raw values → canonical telemetry | TODO | |
-| Implement threshold loader | Load `thresholds.yml` | TODO | |
-| Implement threshold evaluator | Warning/critical status | TODO | |
+| Implement threshold loader | Load `thresholds.yml` | DONE | Threshold rules parsed in config loader |
+| Implement threshold evaluator | Warning/critical status | DONE | Preprocess processor tags telemetry |
 | Add threshold CLI | `nms-agentctl threshold set/list` | TODO | |
-| Add tests | Preprocessing and threshold tests | TODO | |
+| Add tests | Preprocessing and threshold tests | DONE | Processor threshold unit tests |
 
 **Exit Criteria:**
 
@@ -615,4 +615,29 @@ Status update:
 - Phase 6: profile-driven SNMP test -> DONE
 Notes:
 - Test loads profile YAML from temp dir and verifies OID usage + ifIndex tagging.
+
+2026-05-26 12:05
+Task: Phase 7 threshold MVP (preprocess + tags)
+Changed files:
+- internal/models/thresholds.go
+- internal/config/types.go
+- internal/config/validate.go
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- cmd/nms-agent/main.go
+- configs/thresholds.yml
+- docs/CONFIG_SCHEMA.md
+- docs/DATA_CONTRACT.md
+- docs/FLOW.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+Status update:
+- Phase 7: threshold loader/evaluator/tests -> DONE
+Notes:
+- Threshold results are tagged as `threshold.status`, `threshold.matched`, and `threshold.rule`.
 ```

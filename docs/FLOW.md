@@ -28,7 +28,7 @@ flowchart TD
         K1 --> L[Raw Sample]
         K2 --> L
         K3 --> L
-        L --> M[Passthrough Processor]
+        L --> M[Preprocess + Threshold Processor]
         M --> N[Canonical Telemetry]
         N --> O[Enqueue Telemetry]
         O --> Q[(SQLite Queue DB)]

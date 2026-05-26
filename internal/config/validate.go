@@ -59,6 +59,34 @@ func Validate(cfg Loaded) error {
 		cfg.Adapters.Adapters.Configs = map[string]any{}
 	}
 
+	// Threshold rules validation (Phase 7 MVP).
+	for i, r := range cfg.Thresholds.Thresholds {
+		prefix := fmt.Sprintf("thresholds[%d]", i)
+		if strings.TrimSpace(r.Metric) == "" {
+			errs = append(errs, prefix+".metric is required")
+		}
+		op := strings.TrimSpace(r.Operator)
+		switch op {
+		case ">", ">=", "<", "<=", "==", "!=":
+			// ok
+		default:
+			errs = append(errs, prefix+".operator must be one of >, >=, <, <=, ==, !=")
+		}
+		if r.Warning == nil && r.Critical == nil {
+			errs = append(errs, prefix+".warning or .critical is required")
+		}
+		for k, v := range r.Tags {
+			if strings.TrimSpace(k) == "" {
+				errs = append(errs, prefix+".tags has empty key")
+				break
+			}
+			if strings.TrimSpace(v) == "" {
+				errs = append(errs, prefix+".tags["+k+"] is empty")
+				break
+			}
+		}
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("invalid config:\n- %s", strings.Join(errs, "\n- "))
 	}

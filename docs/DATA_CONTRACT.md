@@ -15,3 +15,11 @@ Adapters must only accept canonical telemetry.
 - metric.unit
 - timestamp
 - source.protocol
+
+## Threshold Tags (Phase 7)
+
+When a threshold rule matches, the following tags are added to telemetry:
+
+- threshold.status: ok|warning|critical
+- threshold.matched: true
+- threshold.rule: <metric>#<index>

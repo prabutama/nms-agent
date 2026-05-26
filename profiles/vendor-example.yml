@@ -13,3 +13,8 @@ metrics:
     oid: 1.3.6.1.2.1.2.2.1.8
     type: walk
     index: true
+
+  - metric: snmp.host.memory.size_kb
+    oid: 1.3.6.1.2.1.25.2.2.0
+    type: get
+    unit: kB

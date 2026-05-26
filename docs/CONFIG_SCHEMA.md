@@ -47,10 +47,16 @@ Notes:
 - `address` is a host/IP string (protocol-specific validation is deferred).
 - `icmp.enabled` and `snmp.enabled` toggle which real collectors are used in `--collector-mode auto|real`.
 
-## configs/thresholds.yml (placeholder)
+## configs/thresholds.yml
 
 ```yaml
-thresholds: []
+thresholds:
+  - metric: icmp.latency_ms
+    operator: ">"
+    warning: 50
+    critical: 100
+    tags:
+      source: icmp
 ```
 
 ## configs/adapters.yml (placeholder)

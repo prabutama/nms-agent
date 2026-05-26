@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"nms-agent/internal/models"
+)
 
 // Root is loaded from `agent.yml` and references other config files.
 type Root struct {
@@ -38,9 +42,9 @@ type DeviceICMP struct {
 	Enabled bool `yaml:"enabled"`
 }
 
-// ThresholdsConfig is a placeholder shape for Phase 2 (no behavior yet).
+// ThresholdsConfig contains threshold rules (Phase 7).
 type ThresholdsConfig struct {
-	Thresholds []any `yaml:"thresholds"`
+	Thresholds []models.ThresholdRule `yaml:"thresholds"`
 }
 
 // AdaptersConfig is a placeholder shape for Phase 2 (no adapter runtime logic yet).
