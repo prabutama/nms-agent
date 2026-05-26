@@ -600,4 +600,19 @@ Status update:
 - Phase 6: profile schema/loader/validation/polling -> DONE
 Notes:
 - Profiles are loaded from `profiles/` and selected by vendor/model precedence.
+
+2026-05-23 11:45
+Task: Phase 6 profile-driven SNMP test
+Changed files:
+- internal/collectors/snmp_collector_test.go
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+Status update:
+- Phase 6: profile-driven SNMP test -> DONE
+Notes:
+- Test loads profile YAML from temp dir and verifies OID usage + ifIndex tagging.
 ```
