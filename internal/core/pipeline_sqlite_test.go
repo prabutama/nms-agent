@@ -19,9 +19,10 @@ func (testCollector) Collect(context.Context) ([]models.RawSample, error) {
 		Source:   "dummy",
 		TS:       time.Now().UTC(),
 		Fields: map[string]any{
-			"metric": "demo.ping",
-			"value":  7.0,
-			"unit":   "ms",
+			"metric":       "demo.ping",
+			"value_type":   "number",
+			"value_number": 7.0,
+			"unit":         "ms",
 		},
 	}}, nil
 }
@@ -30,11 +31,12 @@ type testProcessor struct{}
 
 func (testProcessor) Normalize(context.Context, []models.RawSample) ([]models.Telemetry, error) {
 	return []models.Telemetry{{
-		DeviceID: "d1",
-		Metric:   "demo.ping",
-		TS:       time.Now().UTC(),
-		Value:    7.0,
-		Tags:     map[string]string{"unit": "ms"},
+		DeviceID:    "d1",
+		Metric:      "demo.ping",
+		TS:          time.Now().UTC(),
+		ValueType:   "number",
+		ValueNumber: floatPtr(7.0),
+		Tags:        map[string]string{"unit": "ms"},
 	}}, nil
 }
 
@@ -89,4 +91,8 @@ func TestPipeline_EnqueueBeforeSend_SQLite(t *testing.T) {
 	if items2[0].RetryCount != 1 {
 		t.Fatalf("expected retry_count=1 after restart, got %d", items2[0].RetryCount)
 	}
+}
+
+func floatPtr(v float64) *float64 {
+	return &v
 }

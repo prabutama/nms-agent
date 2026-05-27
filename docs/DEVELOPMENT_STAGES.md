@@ -353,7 +353,7 @@ Task: Phase 2 config foundation (MVP)
 Changed files:
 - go.mod
 - configs/agent.yml
-- configs/devices.d/example-router.yml
+- configs/devices.d/mikrotik-routeros.yml
 - configs/thresholds.yml
 - configs/adapters.yml
 - internal/config/types.go
@@ -556,7 +556,7 @@ Changed files:
 - cmd/nms-agent/main.go
 - internal/config/types.go
 - internal/config/validate.go
-- configs/devices.d/example-router.yml
+- configs/devices.d/mikrotik-routeros.yml
 - docs/CONFIG_SCHEMA.md
 - docs/FLOW.md
 - docs/KNOWLEDGE.md
@@ -640,4 +640,107 @@ Status update:
 - Phase 7: threshold loader/evaluator/tests -> DONE
 Notes:
 - Threshold results are tagged as `threshold.status`, `threshold.matched`, and `threshold.rule`.
+
+2026-05-26 12:40
+Task: Phase 7 interface throughput calculation
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- docs/DATA_CONTRACT.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+Status update:
+- Phase 7: throughput/utilization derived metrics -> DONE
+Notes:
+- Derived metrics emitted only after two samples and valid delta.
+
+2026-05-27 09:20
+Task: Rename example device to MikroTik RouterOS
+Changed files:
+- configs/devices.d/mikrotik-routeros.yml
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- Not run (rename/documentation update only)
+Status update:
+- Phase 2/Phase 5 device sample rename -> DONE
+Notes:
+- Updated sample vendor/model to mikrotik/routeros for clarity.
+
+2026-05-27 09:35
+Task: Add MikroTik RouterOS SNMP profile (same as standard)
+Changed files:
+- profiles/mikrotik-routeros.yml
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- Not run (profile file + docs only)
+Status update:
+- Phase 6: vendor profile extension -> DONE
+Notes:
+- MikroTik RouterOS profile currently mirrors standard metrics (uptime + ifTable).
+
+2026-05-27 10:05
+Task: Extend MikroTik RouterOS profile with CPU/memory
+Changed files:
+- profiles/mikrotik-routeros.yml
+- docs/DATA_CONTRACT.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- Not run (profile + docs update)
+Status update:
+- Phase 6: MikroTik profile resource metrics -> DONE
+Notes:
+- Added HOST-RESOURCES CPU load and memory size metrics.
+
+2026-05-27 11:10
+Task: Add value_type + string metric support in telemetry
+Changed files:
+- internal/models/telemetry.go
+- internal/collectors/snmp_collector.go
+- internal/collectors/icmp_collector.go
+- internal/collectors/dummy_collector.go
+- internal/processors/passthrough_processor.go
+- internal/processors/preprocess_threshold_processor.go
+- internal/adapters/terminal_adapter.go
+- internal/queue/sqlite_queue.go
+- internal/collectors/snmp_collector_test.go
+- internal/collectors/icmp_collector_test.go
+- internal/processors/preprocess_threshold_processor_test.go
+- internal/core/pipeline_sqlite_test.go
+- internal/queue/sqlite_queue_test.go
+- cmd/nms-agentctl/queue_retry_test.go
+- docs/DATA_CONTRACT.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+Status update:
+- Phase 7: telemetry value_type support -> DONE
+Notes:
+- value_type is required; number-only thresholds skip string metrics.
+
+2026-05-27 11:20
+Task: Add MikroTik string metrics (sysDescr/sysName/ifName)
+Changed files:
+- profiles/mikrotik-routeros.yml
+- docs/DATA_CONTRACT.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- Not run (profile + docs update)
+Status update:
+- Phase 6: MikroTik profile string metrics -> DONE
+Notes:
+- Added system description/name and interface name metrics.
 ```

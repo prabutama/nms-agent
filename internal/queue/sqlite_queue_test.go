@@ -20,11 +20,12 @@ func TestSQLiteQueue_PersistsAcrossRestart(t *testing.T) {
 
 	ctx := context.Background()
 	telemetry := []models.Telemetry{{
-		DeviceID: "d1",
-		Metric:   "demo.ping",
-		TS:       time.Now().UTC(),
-		Value:    1.23,
-		Tags:     map[string]string{"unit": "ms"},
+		DeviceID:    "d1",
+		Metric:      "demo.ping",
+		TS:          time.Now().UTC(),
+		ValueType:   "number",
+		ValueNumber: floatPtr(1.23),
+		Tags:        map[string]string{"unit": "ms"},
 	}}
 	if err := q1.EnqueueBatch(ctx, telemetry); err != nil {
 		_ = q1.Close()
@@ -74,7 +75,7 @@ func TestSQLiteQueue_MarkFailedIncrementsRetry(t *testing.T) {
 	defer q.Close()
 
 	ctx := context.Background()
-	if err := q.EnqueueBatch(ctx, []models.Telemetry{{DeviceID: "d1", Metric: "m", TS: time.Now().UTC(), Value: 1}}); err != nil {
+	if err := q.EnqueueBatch(ctx, []models.Telemetry{{DeviceID: "d1", Metric: "m", TS: time.Now().UTC(), ValueType: "number", ValueNumber: floatPtr(1)}}); err != nil {
 		t.Fatalf("EnqueueBatch: %v", err)
 	}
 
@@ -117,7 +118,7 @@ func TestSQLiteQueue_EnqueueBatch_GeneratesUniqueIDs(t *testing.T) {
 	ctx := context.Background()
 	batch := make([]models.Telemetry, 0, 200)
 	for i := 0; i < 200; i++ {
-		batch = append(batch, models.Telemetry{DeviceID: "d1", Metric: "m", TS: time.Now().UTC(), Value: float64(i)})
+		batch = append(batch, models.Telemetry{DeviceID: "d1", Metric: "m", TS: time.Now().UTC(), ValueType: "number", ValueNumber: floatPtr(float64(i))})
 	}
 	if err := q.EnqueueBatch(ctx, batch); err != nil {
 		t.Fatalf("EnqueueBatch: %v", err)
@@ -137,4 +138,8 @@ func TestSQLiteQueue_EnqueueBatch_GeneratesUniqueIDs(t *testing.T) {
 		}
 		seen[it.ID] = struct{}{}
 	}
+}
+
+func floatPtr(v float64) *float64 {
+	return &v
 }

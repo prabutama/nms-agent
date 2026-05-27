@@ -33,8 +33,8 @@ Notes:
 ```yaml
 id: router-1
 address: 192.0.2.1
-vendor: example
-model: example-router
+vendor: mikrotik
+model: routeros
 
 icmp:
   enabled: true

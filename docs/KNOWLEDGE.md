@@ -5,7 +5,7 @@
 | `go.mod`                       | Identitas modul Go. File ini menyimpan nama module, versi Go, dan dependency yang digunakan.                                                       |
 | `cmd/nms-agent/main.go`        | Entrypoint agent service. Memilih collector runtime via `--collector-mode` lalu menjalankan pipeline (queue SQLite -> terminal adapter).          |
 | `cmd/nms-agentctl/main.go`     | Entrypoint CLI admin. Nantinya dipakai untuk command seperti tambah device, cek status, queue status, reload, dan validasi config.                 |
-| `internal/models/telemetry.go` | Tempat definisi **canonical telemetry format**. Ini format data netral internal agent setelah data dinormalisasi.                                  |
+| `internal/models/telemetry.go` | Definisi **canonical telemetry format** termasuk value_type dan value_number/value_string untuk data numerik maupun string.                        |
 | `internal/collectors/port.go`  | Kontrak/interface untuk collector. Nantinya SNMP collector dan ICMP collector harus mengikuti interface ini.                                       |
 | `internal/collectors/dummy_collector.go` | Dummy collector Phase 3. Menghasilkan raw sample deterministik untuk demo pipeline tanpa SNMP/ICMP.                                        |
 | `internal/collectors/targets.go` | Tipe `Target` minimal (DeviceID+Address) yang dipakai collector tanpa mengimpor package config.                                                        |
@@ -21,7 +21,7 @@
 | `internal/processors/port.go`  | Kontrak/interface untuk preprocessing dan normalization. Misalnya hitung throughput, latency, packet loss, jitter, lalu ubah ke telemetry standar. |
 | `internal/processors/passthrough_processor.go` | Processor Phase 3 (passthrough). Memetakan RawSample dummy menjadi canonical telemetry sederhana.                               |
 | `internal/processors/preprocess_threshold_processor.go` | Processor Phase 7: preprocessing minimal + evaluasi threshold untuk menambahkan tag status.                          |
-| `internal/processors/preprocess_threshold_processor_test.go` | Unit test processor threshold: status critical/warning dan wildcard tag match.                                   |
+| `internal/processors/preprocess_threshold_processor_test.go` | Unit test processor threshold + derived metrics (bps/utilization) dan wildcard tag match.                        |
 | `internal/queue/port.go`       | Kontrak/interface untuk local queue. Nantinya implementasi SQLite store-and-forward harus mengikuti interface ini.                                 |
 | `internal/queue/memory_queue.go` | Queue stub Phase 3 (in-memory). Untuk demo store-and-forward tanpa SQLite (tidak durable).                                                   |
 | `internal/queue/sqlite_queue.go` | Implementasi queue durable Phase 4A berbasis SQLite. Menyimpan telemetry sebagai JSON dan melacak retry_count.                                |
@@ -32,11 +32,12 @@
 | `internal/core/pipeline.go`    | Orchestrator atau pengatur alur utama. File ini menghubungkan collector, processor, queue, dan adapter sesuai flow agent.                          |
 | `internal/core/pipeline_sqlite_test.go` | Test integrasi pipeline+SQLite queue. Membuktikan data di-enqueue sebelum send dan tetap persist setelah restart.                      |
 | `configs/agent.yml`            | Contoh konfigurasi utama agent (MVP). Mendefinisikan interval polling dan path file konfigurasi lainnya.                                           |
-| `configs/devices.d/example-router.yml` | Contoh inventory device (MVP) termasuk toggle collector `icmp.enabled` / `snmp.enabled` untuk Phase 5.                                          |
+| `configs/devices.d/mikrotik-routeros.yml` | Contoh inventory device (MVP) termasuk toggle collector `icmp.enabled` / `snmp.enabled` untuk Phase 5.                                      |
 | `configs/thresholds.yml`       | Konfigurasi threshold Phase 7 (metric/operator/warning/critical/tags) untuk evaluasi status.                                                     |
 | `configs/adapters.yml`         | Placeholder konfigurasi adapter (Phase 8). Di Phase 2 hanya diload dan dicek struktur top-level key.                                              |
 | `profiles/standard.yml`        | Profile SNMP standar (uptime + interface metrics) untuk semua device.                                                                           |
 | `profiles/vendor-example.yml`  | Contoh profile vendor default untuk `vendor: example`.                                                                                          |
+| `profiles/mikrotik-routeros.yml` | Profile SNMP khusus MikroTik RouterOS (MVP) dengan metric dasar + resource dan string (sysDescr/ifName).                                 |
 | `internal/config/types.go`     | Definisi struct config (root agent.yml, device entry, placeholders thresholds/adapters) untuk YAML loader dan validasi.                            |
 | `internal/config/loader.go`    | Loader konfigurasi YAML. Membaca `agent.yml`, memuat `devices.d/*.yml`, thresholds, adapters, dan resolve path dengan `filepath`.                   |
 | `internal/config/validate.go`  | Validasi dasar konfigurasi (field wajib, duplikasi device id, dan sanity-check struktur YAML thresholds/adapters).                                 |

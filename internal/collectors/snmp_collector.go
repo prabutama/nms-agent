@@ -112,28 +112,20 @@ func (c SNMPCollector) Collect(ctx context.Context) ([]models.RawSample, error) 
 						continue
 					}
 					for _, v := range pkt.Variables {
-						val, ok := pduToFloat(v)
-						if !ok {
-							continue
-						}
-						out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, val, m.Unit, nil))
+						out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, v, m.Unit, nil))
 					}
 					continue
 				}
 
 				if m.Type == "walk" {
 					_ = cli.Walk(m.OID, func(p g.SnmpPDU) error {
-						val, ok := pduToFloat(p)
-						if !ok {
-							return nil
-						}
 						var tags map[string]string
 						if m.Index {
 							if idx, ok := oidIndexSuffix(p.Name); ok {
 								tags = map[string]string{"ifIndex": idx}
 							}
 						}
-						out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, val, m.Unit, tags))
+						out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, p, m.Unit, tags))
 						return nil
 					})
 				}
@@ -191,6 +183,17 @@ func pduToFloat(pdu g.SnmpPDU) (float64, bool) {
 	return float64(bi.Int64()), true
 }
 
+func pduToString(pdu g.SnmpPDU) (string, bool) {
+	switch v := pdu.Value.(type) {
+	case string:
+		return v, true
+	case []byte:
+		return string(v), true
+	default:
+		return "", false
+	}
+}
+
 func oidIndexSuffix(oid string) (string, bool) {
 	// Expect ...".<index>".
 	last := -1
@@ -212,13 +215,23 @@ func oidIndexSuffix(oid string) (string, bool) {
 	return idx, true
 }
 
-func rawMetricWithTags(deviceID, source string, ts time.Time, metric string, value float64, unit string, tags map[string]string) models.RawSample {
-	fields := map[string]any{"metric": metric, "value": value}
+func rawMetricWithTags(deviceID, source string, ts time.Time, metric string, pdu g.SnmpPDU, unit string, tags map[string]string) models.RawSample {
+	fields := map[string]any{"metric": metric}
 	if unit != "" {
 		fields["unit"] = unit
 	}
 	if len(tags) > 0 {
 		fields["tags"] = tags
+	}
+	if s, ok := pduToString(pdu); ok {
+		fields["value_type"] = "string"
+		fields["value_string"] = s
+	} else if val, ok := pduToFloat(pdu); ok {
+		fields["value_type"] = "number"
+		fields["value_number"] = val
+	} else {
+		fields["value_type"] = "number"
+		fields["value_number"] = 0.0
 	}
 	return models.RawSample{DeviceID: deviceID, Source: source, TS: ts, Fields: fields}
 }

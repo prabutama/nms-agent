@@ -26,9 +26,10 @@ func (c DummyCollector) Collect(context.Context) ([]models.RawSample, error) {
 			Source:   "dummy",
 			TS:       now,
 			Fields: map[string]any{
-				"metric": "demo.ping",
-				"value":  42.0,
-				"unit":   "ms",
+				"metric":       "demo.ping",
+				"value_type":   "number",
+				"value_number": 42.0,
+				"unit":         "ms",
 			},
 		},
 	}, nil

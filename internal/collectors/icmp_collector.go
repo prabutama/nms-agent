@@ -164,7 +164,7 @@ func parsePingLossPct(out string) (float64, bool) {
 }
 
 func rawMetric(deviceID, source string, ts time.Time, metric string, value float64, unit string) models.RawSample {
-	fields := map[string]any{"metric": metric, "value": value}
+	fields := map[string]any{"metric": metric, "value_type": "number", "value_number": value}
 	if unit != "" {
 		fields["unit"] = unit
 	}

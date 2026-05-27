@@ -27,8 +27,8 @@ func (a *TerminalAdapter) SendBatch(ctx context.Context, batch []models.Telemetr
 		a.Out = os.Stdout
 	}
 	for _, t := range batch {
-		fmt.Fprintf(a.Out, "%s device=%s metric=%s value=%v tags=%s\n",
-			formatTS(t.TS), t.DeviceID, t.Metric, t.Value, formatTags(t.Tags))
+		fmt.Fprintf(a.Out, "%s device=%s metric=%s value=%s tags=%s\n",
+			formatTS(t.TS), t.DeviceID, t.Metric, formatValue(t), formatTags(t.Tags))
 	}
 	return nil
 }
@@ -54,4 +54,14 @@ func formatTags(tags map[string]string) string {
 		parts = append(parts, fmt.Sprintf("%s=%s", k, tags[k]))
 	}
 	return "{" + strings.Join(parts, ",") + "}"
+}
+
+func formatValue(t models.Telemetry) string {
+	if t.ValueType == "string" && t.ValueString != nil {
+		return fmt.Sprintf("%q", *t.ValueString)
+	}
+	if t.ValueType == "number" && t.ValueNumber != nil {
+		return fmt.Sprintf("%v", *t.ValueNumber)
+	}
+	return ""
 }

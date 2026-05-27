@@ -117,7 +117,7 @@ func run(args []string) int {
 
 	p := core.NewPipeline(
 		coll,
-		processors.PreprocessThresholdProcessor{Rules: loaded.Thresholds.Thresholds},
+		&processors.PreprocessThresholdProcessor{Rules: loaded.Thresholds.Thresholds},
 		q,
 		adapters.NewTerminalAdapter(),
 	)

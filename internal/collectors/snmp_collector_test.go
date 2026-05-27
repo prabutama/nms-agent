@@ -83,6 +83,43 @@ func TestSNMPCollector_EmitsUptimeSeconds(t *testing.T) {
 	if m, _ := samples[0].Fields["metric"].(string); m != "snmp.uptime_seconds" {
 		t.Fatalf("metric=%q", m)
 	}
+	if vt, _ := samples[0].Fields["value_type"].(string); vt != "number" {
+		t.Fatalf("value_type=%q", vt)
+	}
+}
+
+func TestSNMPCollector_EmitsStringMetric(t *testing.T) {
+	c := SNMPCollector{
+		Targets: []Target{{DeviceID: "d1", Address: "127.0.0.1", Vendor: "mikrotik", Model: "routeros"}},
+		Profiles: []profiles.Profile{{
+			Name:    "mikrotik-routeros",
+			Match:   profiles.Match{Vendor: "mikrotik", Model: "routeros"},
+			Metrics: []profiles.Metric{{Metric: "snmp.system.description", OID: "1.3.6.1.2.1.1.1.0", Type: "get"}},
+		}},
+		NewClient: func(t Target, cfg snmpClientConfig) snmpClient {
+			_ = t
+			_ = cfg
+			return fakeSNMPClient{packet: &g.SnmpPacket{Variables: []g.SnmpPDU{{
+				Name:  "1.3.6.1.2.1.1.1.0",
+				Type:  g.OctetString,
+				Value: []byte("RouterOS CHR"),
+			}}}}
+		},
+	}
+
+	samples, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(samples) != 1 {
+		t.Fatalf("expected 1 sample, got %d", len(samples))
+	}
+	if vt, _ := samples[0].Fields["value_type"].(string); vt != "string" {
+		t.Fatalf("value_type=%q", vt)
+	}
+	if vs, _ := samples[0].Fields["value_string"].(string); vs != "RouterOS CHR" {
+		t.Fatalf("value_string=%q", vs)
+	}
 }
 
 func TestSNMPCollector_PartialSnapshotSkipsDeviceOnConnectError(t *testing.T) {

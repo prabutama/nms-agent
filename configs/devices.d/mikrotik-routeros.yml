@@ -1,9 +1,9 @@
-id: router-1
+id: mikrotik-router-1
 address: 10.10.10.151
 
 # Device metadata (future use for profiles/collectors).
-vendor: example
-model: example-router
+vendor: mikrotik
+model: routeros
 
 # Enable real collectors (Phase 5 runtime selection).
 icmp:

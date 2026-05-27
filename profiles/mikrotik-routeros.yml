@@ -1,0 +1,75 @@
+name: mikrotik-routeros
+match:
+  vendor: mikrotik
+  model: routeros
+
+metrics:
+  - metric: snmp.system.description
+    oid: 1.3.6.1.2.1.1.1.0
+    type: get
+
+  - metric: snmp.system.name
+    oid: 1.3.6.1.2.1.1.5.0
+    type: get
+
+  - metric: snmp.uptime_seconds
+    oid: 1.3.6.1.2.1.1.3.0
+    type: get
+    unit: s
+
+  - metric: snmp.host.cpu.load_pct
+    oid: 1.3.6.1.2.1.25.3.3.1.2
+    type: walk
+    unit: pct
+    index: true
+
+  - metric: snmp.host.memory.size_kb
+    oid: 1.3.6.1.2.1.25.2.2.0
+    type: get
+    unit: kB
+
+  - metric: snmp.host.storage.allocation_units
+    oid: 1.3.6.1.2.1.25.2.3.1.4
+    type: walk
+    unit: bytes
+    index: true
+
+  - metric: snmp.if.mtu
+    oid: 1.3.6.1.2.1.2.2.1.4
+    type: walk
+    unit: bytes
+    index: true
+
+  - metric: snmp.if.name
+    oid: 1.3.6.1.2.1.31.1.1.1.1
+    type: walk
+    index: true
+
+  - metric: snmp.if.speed_bps
+    oid: 1.3.6.1.2.1.2.2.1.5
+    type: walk
+    unit: bps
+    index: true
+
+  - metric: snmp.if.high_speed_mbps
+    oid: 1.3.6.1.2.1.31.1.1.1.15
+    type: walk
+    unit: Mbps
+    index: true
+
+  - metric: snmp.if.oper_status
+    oid: 1.3.6.1.2.1.2.2.1.8
+    type: walk
+    index: true
+
+  - metric: snmp.if.hc_in_octets
+    oid: 1.3.6.1.2.1.31.1.1.1.6
+    type: walk
+    unit: octets
+    index: true
+
+  - metric: snmp.if.hc_out_octets
+    oid: 1.3.6.1.2.1.31.1.1.1.10
+    type: walk
+    unit: octets
+    index: true

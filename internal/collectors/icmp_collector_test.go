@@ -52,7 +52,7 @@ func TestICMPCollector_PartialSnapshotOnErrorStillEmitsReachable0(t *testing.T) 
 	if m, _ := samples[0].Fields["metric"].(string); m != "icmp.reachable" {
 		t.Fatalf("expected first metric icmp.reachable, got %q", m)
 	}
-	if v, _ := samples[0].Fields["value"].(float64); v != 0.0 {
+	if v, _ := samples[0].Fields["value_number"].(float64); v != 0.0 {
 		t.Fatalf("expected reachable=0, got %v", v)
 	}
 }

@@ -23,11 +23,12 @@ func TestQueueRetry_DeliversAndDeletesPending(t *testing.T) {
 
 	// Seed one pending item.
 	tel := []models.Telemetry{{
-		TS:       time.Now().UTC(),
-		DeviceID: "dev-1",
-		Metric:   "m1",
-		Value:    1,
-		Tags:     map[string]string{"k": "v"},
+		TS:          time.Now().UTC(),
+		DeviceID:    "dev-1",
+		Metric:      "m1",
+		ValueType:   "number",
+		ValueNumber: floatPtr(1),
+		Tags:        map[string]string{"k": "v"},
 	}}
 	if err := q.EnqueueBatch(context.Background(), tel); err != nil {
 		t.Fatalf("EnqueueBatch: %v", err)
@@ -66,4 +67,8 @@ func TestQueueRetry_DeliversAndDeletesPending(t *testing.T) {
 	if len(items) != 0 {
 		t.Fatalf("expected queue empty, got %d", len(items))
 	}
+}
+
+func floatPtr(v float64) *float64 {
+	return &v
 }
