@@ -1,0 +1,13 @@
+id: proxmox-ta
+address: 10.10.10.150
+
+# Device metadata (future use for profiles/collectors).
+vendor: linux
+model: ubuntu
+
+# Enable real collectors (Phase 5 runtime selection).
+icmp:
+  enabled: true
+snmp:
+  enabled: true
+  
