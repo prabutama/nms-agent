@@ -1,6 +1,9 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"nms-agent/internal/models"
@@ -14,6 +17,34 @@ type Root struct {
 
 type Agent struct {
 	PollInterval time.Duration `yaml:"poll_interval"`
+	Delivery     Delivery      `yaml:"delivery"`
+}
+
+// Delivery configures the queue delivery drain loop (Phase 8).
+type Delivery struct {
+	MaxBatch           int  `yaml:"max_batch"`
+	DrainEnabled       bool `yaml:"drain_enabled"`
+	MaxBatchesPerCycle int  `yaml:"max_batches_per_cycle"`
+	StopOnError        bool `yaml:"stop_on_error"`
+}
+
+// ResolvePath resolves a config path relative to baseDir and expands env vars.
+func ResolvePath(baseDir, path string) string {
+	p := os.ExpandEnv(strings.TrimSpace(path))
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	return filepath.Clean(filepath.Join(baseDir, p))
+}
+
+func (d Delivery) WithDefaults() Delivery {
+	if d.MaxBatch <= 0 {
+		d.MaxBatch = 100
+	}
+	if d.MaxBatchesPerCycle <= 0 {
+		d.MaxBatchesPerCycle = 10
+	}
+	return d
 }
 
 type Paths struct {

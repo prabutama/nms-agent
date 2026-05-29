@@ -9,6 +9,16 @@ metrics:
     type: get
     unit: s
 
+  - metric: snmp.if.type
+    oid: 1.3.6.1.2.1.2.2.1.3
+    type: walk
+    index: true
+
+  - metric: snmp.if.connector_present
+    oid: 1.3.6.1.2.1.31.1.1.1.17
+    type: walk
+    index: true
+
   - metric: snmp.if.oper_status
     oid: 1.3.6.1.2.1.2.2.1.8
     type: walk

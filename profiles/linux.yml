@@ -1,7 +1,7 @@
-name: mikrotik-routeros
+name: linux-default
 match:
-  vendor: mikrotik
-  model: routeros
+  vendor: linux
+  model: ""
 
 metrics:
   - metric: snmp.system.description
@@ -28,6 +28,59 @@ metrics:
     type: get
     unit: kB
 
+  # Proxmox/Linux memory breakdown (UCD-SNMP-MIB) to match `free` semantics.
+  # These OIDs are optional: if the agent doesn't expose UCD-SNMP-MIB, they will be skipped.
+  - metric: snmp.host.memory.free_kb
+    oid: 1.3.6.1.4.1.2021.4.6.0 # memAvailReal
+    type: get
+    unit: kB
+
+  - metric: snmp.host.memory.available_kb
+    oid: 1.3.6.1.4.1.2021.4.27.0 # memSysAvail
+    type: get
+    unit: kB
+
+  - metric: snmp.host.memory.shared_kb
+    oid: 1.3.6.1.4.1.2021.4.13.0 # memShared
+    type: get
+    unit: kB
+
+  - metric: snmp.host.memory.buffer_kb
+    oid: 1.3.6.1.4.1.2021.4.14.0 # memBuffer
+    type: get
+    unit: kB
+
+  - metric: snmp.host.memory.cached_kb
+    oid: 1.3.6.1.4.1.2021.4.15.0 # memCached
+    type: get
+    unit: kB
+
+  - metric: snmp.host.swap.total_kb
+    oid: 1.3.6.1.4.1.2021.4.3.0 # memTotalSwap
+    type: get
+    unit: kB
+
+  - metric: snmp.host.swap.free_kb
+    oid: 1.3.6.1.4.1.2021.4.4.0 # memAvailSwap
+    type: get
+    unit: kB
+
+  - metric: snmp.host.storage.allocation_units
+    oid: 1.3.6.1.2.1.25.2.3.1.4
+    type: walk
+    unit: bytes
+    index: true
+
+  - metric: snmp.host.storage.type
+    oid: 1.3.6.1.2.1.25.2.3.1.2
+    type: walk
+    index: true
+
+  - metric: snmp.host.storage.description
+    oid: 1.3.6.1.2.1.25.2.3.1.3
+    type: walk
+    index: true
+
   - metric: snmp.host.storage.size_units
     oid: 1.3.6.1.2.1.25.2.3.1.5
     type: walk
@@ -36,12 +89,6 @@ metrics:
   - metric: snmp.host.storage.used_units
     oid: 1.3.6.1.2.1.25.2.3.1.6
     type: walk
-    index: true
-
-  - metric: snmp.host.storage.allocation_units
-    oid: 1.3.6.1.2.1.25.2.3.1.4
-    type: walk
-    unit: bytes
     index: true
 
   - metric: snmp.if.mtu

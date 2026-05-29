@@ -14,8 +14,16 @@ import (
 type PreprocessThresholdProcessor struct {
 	Rules []models.ThresholdRule
 
-	lastCounters map[counterKey]counterSample
-	lastSpeed    map[speedKey]float64
+	lastCounters  map[counterKey]counterSample
+	lastSpeed     map[speedKey]float64
+	lastHighSpeed map[speedKey]float64
+	lastIfaceInfo map[speedKey]ifaceInfo
+}
+
+type ifaceInfo struct {
+	ifType           int
+	ifName           string
+	connectorPresent int // 0=unknown, 1=true, 2=false
 }
 
 func (p *PreprocessThresholdProcessor) Normalize(ctx context.Context, raw []models.RawSample) ([]models.Telemetry, error) {
@@ -24,8 +32,14 @@ func (p *PreprocessThresholdProcessor) Normalize(ctx context.Context, raw []mode
 		return nil, err
 	}
 
+	p.cacheIfaceInfo(telemetry)
+
 	derived := p.deriveInterfaceMetrics(telemetry)
 	telemetry = append(telemetry, derived...)
+
+	telemetry = p.filterPhysicalInterfaces(telemetry)
+
+	telemetry = p.normalizeMetrics(telemetry)
 
 	for i := range telemetry {
 		t := &telemetry[i]
@@ -61,6 +75,9 @@ func (p *PreprocessThresholdProcessor) deriveInterfaceMetrics(telemetry []models
 	if p.lastSpeed == nil {
 		p.lastSpeed = map[speedKey]float64{}
 	}
+	if p.lastHighSpeed == nil {
+		p.lastHighSpeed = map[speedKey]float64{}
+	}
 
 	current := map[counterKey]counterSample{}
 	priority := map[counterKey]int{}
@@ -76,6 +93,14 @@ func (p *PreprocessThresholdProcessor) deriveInterfaceMetrics(telemetry []models
 		// Capture speed when present.
 		if t.Metric == "snmp.if.speed_bps" && *t.ValueNumber > 0 {
 			p.lastSpeed[speedKey{deviceID: t.DeviceID, ifIndex: ifIndex}] = *t.ValueNumber
+			continue
+		}
+		// Capture high-speed as fallback; only if speed_bps hasn't been recorded yet.
+		if t.Metric == "snmp.if.high_speed_mbps" && *t.ValueNumber > 0 {
+			sk := speedKey{deviceID: t.DeviceID, ifIndex: ifIndex}
+			if p.lastSpeed[sk] == 0 {
+				p.lastHighSpeed[sk] = *t.ValueNumber
+			}
 			continue
 		}
 
@@ -109,7 +134,13 @@ func (p *PreprocessThresholdProcessor) deriveInterfaceMetrics(telemetry []models
 				baseTags["unit"] = "bps"
 				derived = append(derived, numberTelemetry(key.deviceID, metric, cur.ts, bps, baseTags))
 
-				speed := p.lastSpeed[speedKey{deviceID: key.deviceID, ifIndex: key.ifIndex}]
+				sk := speedKey{deviceID: key.deviceID, ifIndex: key.ifIndex}
+				speed := p.lastSpeed[sk]
+				if speed == 0 {
+					if highMbps := p.lastHighSpeed[sk]; highMbps > 0 {
+						speed = highMbps * 1_000_000
+					}
+				}
 				if speed > 0 {
 					util := (bps / speed) * 100
 					utilTags := baseIfaceTags(cur.tags)
@@ -124,6 +155,92 @@ func (p *PreprocessThresholdProcessor) deriveInterfaceMetrics(telemetry []models
 		p.lastCounters[key] = cur
 	}
 	return derived
+}
+
+func (p *PreprocessThresholdProcessor) cacheIfaceInfo(telemetry []models.Telemetry) {
+	if p.lastIfaceInfo == nil {
+		p.lastIfaceInfo = map[speedKey]ifaceInfo{}
+	}
+	for _, t := range telemetry {
+		ifIndex := t.Tags["ifIndex"]
+		if ifIndex == "" {
+			continue
+		}
+		sk := speedKey{deviceID: t.DeviceID, ifIndex: ifIndex}
+		info := p.lastIfaceInfo[sk]
+
+		switch t.Metric {
+		case "snmp.if.type":
+			if t.ValueType == "number" && t.ValueNumber != nil {
+				info.ifType = int(*t.ValueNumber)
+			}
+		case "snmp.if.name":
+			if t.ValueType == "string" && t.ValueString != nil {
+				info.ifName = *t.ValueString
+			}
+		case "snmp.if.connector_present":
+			if t.ValueType == "number" && t.ValueNumber != nil {
+				info.connectorPresent = int(*t.ValueNumber)
+			}
+		}
+		p.lastIfaceInfo[sk] = info
+	}
+}
+
+func (p *PreprocessThresholdProcessor) filterPhysicalInterfaces(telemetry []models.Telemetry) []models.Telemetry {
+	out := make([]models.Telemetry, 0, len(telemetry))
+	for _, t := range telemetry {
+		ifIndex := t.Tags["ifIndex"]
+		if ifIndex != "" {
+			info, known := p.lastIfaceInfo[speedKey{deviceID: t.DeviceID, ifIndex: ifIndex}]
+			if known && !p.isPhysicalInterface(info) {
+				continue
+			}
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+func (p *PreprocessThresholdProcessor) isPhysicalInterface(info ifaceInfo) bool {
+	// Rule 1: ifName matches known virtual pattern => drop.
+	if info.ifName != "" && isVirtualIfaceName(info.ifName) {
+		return false
+	}
+	// Rule 2: ifConnectorPresent=true => strong physical signal.
+	if info.connectorPresent == 1 {
+		return true
+	}
+	// Rule 3: ifConnectorPresent explicitly false => drop.
+	if info.connectorPresent == 2 {
+		return false
+	}
+	// Rule 4: ifType allowlist (6=ethernet, 71=wifi).
+	if info.ifType == 6 || info.ifType == 71 {
+		return true
+	}
+	// Rule 5: ifType known but not in allowlist => drop.
+	if info.ifType != 0 {
+		return false
+	}
+	// Rule 6: totally unknown signals => keep (safe default).
+	return true
+}
+
+var virtualIfacePrefixes = []string{
+	"vmbr", "tap", "veth", "fwbr", "fwpr", "fwln",
+	"docker", "br-", "cni", "flannel", "cali", "virbr",
+	"lo", "dummy", "tun", "bond", "team", "sit", "gre",
+	"wg", "tailscale", "zt", "vnet",
+}
+
+func isVirtualIfaceName(name string) bool {
+	for _, prefix := range virtualIfacePrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func counterDirection(metric string) (string, int) {
@@ -165,6 +282,69 @@ func numberTelemetry(deviceID, metric string, ts time.Time, value float64, tags 
 		ValueNumber: &val,
 		Tags:        tags,
 	}
+}
+
+func (p *PreprocessThresholdProcessor) normalizeMetrics(telemetry []models.Telemetry) []models.Telemetry {
+	for i := range telemetry {
+		t := &telemetry[i]
+		if t.ValueType != "number" || t.ValueNumber == nil {
+			continue
+		}
+		metric := t.Metric
+		val := *t.ValueNumber
+
+		if t.Tags == nil {
+			t.Tags = map[string]string{}
+		}
+
+		switch {
+		case strings.HasSuffix(metric, "_pct"):
+			if val < 0 {
+				val = 0
+			} else if val > 100 {
+				val = 100
+			}
+			if t.Tags["unit"] == "" {
+				t.Tags["unit"] = "pct"
+			}
+
+		case strings.HasSuffix(metric, "_ms"):
+			if val < 0 {
+				val = 0
+			}
+			if t.Tags["unit"] == "" {
+				t.Tags["unit"] = "ms"
+			}
+
+		case strings.HasSuffix(metric, "_seconds"):
+			if val < 0 {
+				val = 0
+			}
+			if t.Tags["unit"] == "" {
+				t.Tags["unit"] = "s"
+			}
+
+		case strings.HasSuffix(metric, "_bps"):
+			if val < 0 {
+				val = 0
+			}
+			if t.Tags["unit"] == "" {
+				t.Tags["unit"] = "bps"
+			}
+		}
+
+		// icmp.reachable: normalise to 0 or 1.
+		if metric == "icmp.reachable" {
+			if *t.ValueNumber > 0 {
+				val = 1
+			} else {
+				val = 0
+			}
+		}
+
+		t.ValueNumber = &val
+	}
+	return telemetry
 }
 
 func applyThresholds(t *models.Telemetry, rules []models.ThresholdRule) {

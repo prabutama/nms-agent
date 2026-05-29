@@ -298,6 +298,63 @@ func TestPreprocessThresholdProcessor_DerivedMetricsEvaluatedByThresholds(t *tes
 	}
 }
 
+func TestPreprocessThresholdProcessor_PrefersHighCapacityCounters(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(10, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.in_octets",
+			"value_type":   "number",
+			"value_number": 1000.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}, {
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(10, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.hc_in_octets",
+			"value_type":   "number",
+			"value_number": 2000.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(20, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.in_octets",
+			"value_type":   "number",
+			"value_number": 1500.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}, {
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(20, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.hc_in_octets",
+			"value_type":   "number",
+			"value_number": 2600.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	val, ok := metricValue(telemetry, "snmp.if.rx_bps")
+	if !ok {
+		t.Fatalf("expected rx_bps from high-capacity counters")
+	}
+	if val != 480.0 {
+		t.Fatalf("expected rx_bps=480, got %v", val)
+	}
+}
+
 func TestPreprocessThresholdProcessor_SkipsThresholdForStringValue(t *testing.T) {
 	rules := []models.ThresholdRule{{
 		Metric:   "snmp.system.description",
@@ -329,6 +386,671 @@ func TestPreprocessThresholdProcessor_SkipsThresholdForStringValue(t *testing.T)
 	}
 }
 
+func TestPreprocessThresholdProcessor_UsesHighSpeedMbpsFallback(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// First sample: establish baseline.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(10, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.in_octets",
+			"value_type":   "number",
+			"value_number": 1000.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+
+	// Provide high_speed_mbps (but no speed_bps).
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(20, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.high_speed_mbps",
+			"value_type":   "number",
+			"value_number": 1000.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+
+	// Counter sample at ts=30 vs baseline at ts=10: dt=20s, delta=2000 octets.
+	// bps = (2000*8)/20 = 800 bps; speed = 1000 Mbps * 1e6 = 1e9 bps;
+	// utilization = (800/1e9)*100 = 0.00008%
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(30, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.in_octets",
+			"value_type":   "number",
+			"value_number": 3000.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if !hasMetric(telemetry, "snmp.if.rx_utilization_pct") {
+		t.Fatalf("expected utilization from high_speed_mbps fallback")
+	}
+	val, ok := metricValue(telemetry, "snmp.if.rx_utilization_pct")
+	if !ok {
+		t.Fatalf("expected numeric utilization value")
+	}
+	if val < 0.00007 || val > 0.00009 {
+		t.Fatalf("expected utilization around 0.00008, got %v", val)
+	}
+}
+
+func TestPreprocessThresholdProcessor_PrefersSpeedBpsOverHighSpeedMbps(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// First sample: establish baseline.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(10, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.in_octets",
+			"value_type":   "number",
+			"value_number": 1000.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+
+	// Provide both speed_bps (100 Mbps) and high_speed_mbps (1000 Mbps) in the same cycle.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(20, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.speed_bps",
+			"value_type":   "number",
+			"value_number": 100_000_000.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}, {
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(20, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.high_speed_mbps",
+			"value_type":   "number",
+			"value_number": 1000.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+
+	// Second sample: utilization must use 100 Mbps from speed_bps, not 1000 Mbps from high_speed_mbps.
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(30, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.in_octets",
+			"value_type":   "number",
+			"value_number": 3000.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if !hasMetric(telemetry, "snmp.if.rx_utilization_pct") {
+		t.Fatalf("expected utilization")
+	}
+	// baseline ts=10, sample ts=30 => dt=20s; delta=2000 octets => bps=800; speed=100_000_000 => util=0.0008%
+	val, ok := metricValue(telemetry, "snmp.if.rx_utilization_pct")
+	if !ok {
+		t.Fatalf("expected numeric utilization value")
+	}
+	if val < 0.0007 || val > 0.0009 {
+		t.Fatalf("expected utilization around 0.0008, got %v", val)
+	}
+}
+
+func TestPreprocessThresholdProcessor_FiltersNonPhysicalInterfaces(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// First, register ifType=1 (other) for ifIndex=1.
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Now().UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.type",
+			"value_type":   "number",
+			"value_number": 1.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+
+	// Now send an interface metric for ifIndex=1. It should be filtered out.
+	telemetry, err = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Now().UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.oper_status",
+			"value_type":   "number",
+			"value_number": 1.0,
+			"tags":         map[string]string{"ifIndex": "1"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if hasMetric(telemetry, "snmp.if.oper_status") {
+		t.Fatalf("expected non-physical interface metric to be filtered out")
+	}
+}
+
+func TestPreprocessThresholdProcessor_KeepsPhysicalInterfaces(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// Register ifType=6 (ethernet) for ifIndex=2.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Now().UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.type",
+			"value_type":   "number",
+			"value_number": 6.0,
+			"tags":         map[string]string{"ifIndex": "2"},
+		},
+	}})
+
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Now().UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.oper_status",
+			"value_type":   "number",
+			"value_number": 1.0,
+			"tags":         map[string]string{"ifIndex": "2"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if !hasMetric(telemetry, "snmp.if.oper_status") {
+		t.Fatalf("expected physical interface metric to be kept")
+	}
+}
+
+func TestPreprocessThresholdProcessor_KeepsWhenIfTypeUnknown(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// No ifType known for ifIndex=3 — should be kept by default.
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Now().UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.oper_status",
+			"value_type":   "number",
+			"value_number": 1.0,
+			"tags":         map[string]string{"ifIndex": "3"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if !hasMetric(telemetry, "snmp.if.oper_status") {
+		t.Fatalf("expected interface metric with unknown ifType to be kept")
+	}
+}
+
+func TestPreprocessThresholdProcessor_FiltersDerivedMetricsForNonPhysical(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// Register ifType=1 (non-physical) for ifIndex=5.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(10, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.type",
+			"value_type":   "number",
+			"value_number": 1.0,
+			"tags":         map[string]string{"ifIndex": "5"},
+		},
+	}})
+	// Baseline counter.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(10, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.in_octets",
+			"value_type":   "number",
+			"value_number": 1000.0,
+			"tags":         map[string]string{"ifIndex": "5"},
+		},
+	}})
+	// Second sample; derived metrics should NOT appear for non-physical ifIndex.
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(20, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.if.in_octets",
+			"value_type":   "number",
+			"value_number": 2000.0,
+			"tags":         map[string]string{"ifIndex": "5"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if hasMetric(telemetry, "snmp.if.rx_bps") {
+		t.Fatalf("did not expect rx_bps for non-physical interface")
+	}
+	if hasMetric(telemetry, "snmp.if.rx_utilization_pct") {
+		t.Fatalf("did not expect rx_utilization_pct for non-physical interface")
+	}
+}
+
+func TestPreprocessThresholdProcessor_FiltersVirtualNamePatterns_Proxmox(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// Register ifName=vmbr0 for ifIndex=10 via cache.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.name", "value_type": "string", "value_string": "vmbr0",
+			"tags": map[string]string{"ifIndex": "10"},
+		},
+	}})
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.oper_status", "value_type": "number", "value_number": 1.0,
+			"tags": map[string]string{"ifIndex": "10"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if hasMetric(telemetry, "snmp.if.oper_status") {
+		t.Fatalf("expected vmbr* interface to be filtered out")
+	}
+
+	// tap, veth, fwbr, fwpr, fwln patterns.
+	for _, name := range []string{"tap0", "vethabc", "fwbr123", "fwpr456", "fwln789"} {
+		_, _ = p.Normalize(context.Background(), []models.RawSample{{
+			DeviceID: "d2", Source: "snmp", TS: time.Now().UTC(),
+			Fields: map[string]any{
+				"metric": "snmp.if.name", "value_type": "string", "value_string": name,
+				"tags": map[string]string{"ifIndex": "1"},
+			},
+		}})
+		telemetry, _ = p.Normalize(context.Background(), []models.RawSample{{
+			DeviceID: "d2", Source: "snmp", TS: time.Now().UTC(),
+			Fields: map[string]any{
+				"metric": "snmp.if.oper_status", "value_type": "number", "value_number": 1.0,
+				"tags": map[string]string{"ifIndex": "1"},
+			},
+		}})
+		if hasMetric(telemetry, "snmp.if.oper_status") {
+			t.Fatalf("expected %s interface to be filtered out", name)
+		}
+	}
+}
+
+func TestPreprocessThresholdProcessor_FiltersVirtualNamePatterns_DockerK8s(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	for _, name := range []string{"docker0", "br-abc123", "cni0", "flannel.1", "cali123"} {
+		_, _ = p.Normalize(context.Background(), []models.RawSample{{
+			DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+			Fields: map[string]any{
+				"metric": "snmp.if.name", "value_type": "string", "value_string": name,
+				"tags": map[string]string{"ifIndex": "1"},
+			},
+		}})
+		telemetry, _ := p.Normalize(context.Background(), []models.RawSample{{
+			DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+			Fields: map[string]any{
+				"metric": "snmp.if.oper_status", "value_type": "number", "value_number": 1.0,
+				"tags": map[string]string{"ifIndex": "1"},
+			},
+		}})
+		if hasMetric(telemetry, "snmp.if.oper_status") {
+			t.Fatalf("expected %s interface to be filtered out", name)
+		}
+	}
+}
+
+func TestPreprocessThresholdProcessor_KeepsPhysicalNames(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	for _, name := range []string{"eno1", "eth0", "ens18", "enp3s0", "wlp58s0", "enx001122334455"} {
+		_, _ = p.Normalize(context.Background(), []models.RawSample{{
+			DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+			Fields: map[string]any{
+				"metric": "snmp.if.name", "value_type": "string", "value_string": name,
+				"tags": map[string]string{"ifIndex": "1"},
+			},
+		}})
+		telemetry, _ := p.Normalize(context.Background(), []models.RawSample{{
+			DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+			Fields: map[string]any{
+				"metric": "snmp.if.oper_status", "value_type": "number", "value_number": 1.0,
+				"tags": map[string]string{"ifIndex": "1"},
+			},
+		}})
+		if !hasMetric(telemetry, "snmp.if.oper_status") {
+			t.Fatalf("expected %s interface to be kept", name)
+		}
+	}
+}
+
+func TestPreprocessThresholdProcessor_ConnectorPresentOverrides(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// Register ifType=1, ifName unknown, but connectorPresent=true => keep.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.type", "value_type": "number", "value_number": 1.0,
+			"tags": map[string]string{"ifIndex": "10"},
+		},
+	}, {
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.connector_present", "value_type": "number", "value_number": 1.0,
+			"tags": map[string]string{"ifIndex": "10"},
+		},
+	}})
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.oper_status", "value_type": "number", "value_number": 1.0,
+			"tags": map[string]string{"ifIndex": "10"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if !hasMetric(telemetry, "snmp.if.oper_status") {
+		t.Fatalf("expected interface with connectorPresent=true to be kept")
+	}
+}
+
+func TestPreprocessThresholdProcessor_ConnectorFalseDrops(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// ifType=6 but connectorPresent=false => drop.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.type", "value_type": "number", "value_number": 6.0,
+			"tags": map[string]string{"ifIndex": "10"},
+		},
+	}, {
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.connector_present", "value_type": "number", "value_number": 2.0,
+			"tags": map[string]string{"ifIndex": "10"},
+		},
+	}})
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.oper_status", "value_type": "number", "value_number": 1.0,
+			"tags": map[string]string{"ifIndex": "10"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if hasMetric(telemetry, "snmp.if.oper_status") {
+		t.Fatalf("expected interface with connectorPresent=false to be dropped")
+	}
+}
+
+func TestPreprocessThresholdProcessor_KeepsWifiIfType(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	// ifType=71 (wifi) should be kept.
+	_, _ = p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.type", "value_type": "number", "value_number": 71.0,
+			"tags": map[string]string{"ifIndex": "3"},
+		},
+	}})
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.oper_status", "value_type": "number", "value_number": 1.0,
+			"tags": map[string]string{"ifIndex": "3"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if !hasMetric(telemetry, "snmp.if.oper_status") {
+		t.Fatalf("expected wifi interface (ifType=71) to be kept")
+	}
+}
+
+func TestNormalizeMetrics_ClampsPercentTo100(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.rx_utilization_pct", "value_type": "number", "value_number": 150.0,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	val, ok := metricValue(telemetry, "snmp.if.rx_utilization_pct")
+	if !ok {
+		t.Fatalf("expected metric")
+	}
+	if val != 100.0 {
+		t.Fatalf("expected 100, got %v", val)
+	}
+	if telemetry[0].Tags["unit"] != "pct" {
+		t.Fatalf("expected unit=pct, got %q", telemetry[0].Tags["unit"])
+	}
+}
+
+func TestNormalizeMetrics_ClampsPercentAbove0(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "some_metric_pct", "value_type": "number", "value_number": -5.0,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	val, ok := metricValue(telemetry, "some_metric_pct")
+	if !ok {
+		t.Fatalf("expected metric")
+	}
+	if val != 0 {
+		t.Fatalf("expected 0, got %v", val)
+	}
+}
+
+func TestNormalizeMetrics_ClampsMsToNonNegative(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "icmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "icmp.latency_ms", "value_type": "number", "value_number": -10.0,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	val, ok := metricValue(telemetry, "icmp.latency_ms")
+	if !ok {
+		t.Fatalf("expected metric")
+	}
+	if val != 0 {
+		t.Fatalf("expected 0, got %v", val)
+	}
+	if telemetry[0].Tags["unit"] != "ms" {
+		t.Fatalf("expected unit=ms, got %q", telemetry[0].Tags["unit"])
+	}
+}
+
+func TestNormalizeMetrics_ClampsSecondsToNonNegative(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.uptime_seconds", "value_type": "number", "value_number": -1.0,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	val, ok := metricValue(telemetry, "snmp.uptime_seconds")
+	if !ok {
+		t.Fatalf("expected metric")
+	}
+	if val != 0 {
+		t.Fatalf("expected 0, got %v", val)
+	}
+	if telemetry[0].Tags["unit"] != "s" {
+		t.Fatalf("expected unit=s, got %q", telemetry[0].Tags["unit"])
+	}
+}
+
+func TestNormalizeMetrics_ClampsBpsToNonNegative(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.rx_bps", "value_type": "number", "value_number": -500.0,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	val, ok := metricValue(telemetry, "snmp.if.rx_bps")
+	if !ok {
+		t.Fatalf("expected metric")
+	}
+	if val != 0 {
+		t.Fatalf("expected 0, got %v", val)
+	}
+	if telemetry[0].Tags["unit"] != "bps" {
+		t.Fatalf("expected unit=bps, got %q", telemetry[0].Tags["unit"])
+	}
+}
+
+func TestNormalizeMetrics_ReachableNormalisesTo0Or1(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	tests := []struct {
+		input float64
+		want  float64
+	}{
+		{0, 0}, {0.0, 0}, {-1, 0}, {1, 1}, {2.5, 1},
+	}
+	for _, tt := range tests {
+		telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+			DeviceID: "d1", Source: "icmp", TS: time.Now().UTC(),
+			Fields: map[string]any{
+				"metric": "icmp.reachable", "value_type": "number", "value_number": tt.input,
+			},
+		}})
+		if err != nil {
+			t.Fatalf("Normalize(%v): %v", tt.input, err)
+		}
+		val, ok := metricValue(telemetry, "icmp.reachable")
+		if !ok {
+			t.Fatalf("expected metric for input %v", tt.input)
+		}
+		if val != tt.want {
+			t.Fatalf("input %v: expected %v, got %v", tt.input, tt.want, val)
+		}
+	}
+}
+
+func TestNormalizeMetrics_PreservesExistingUnitTag(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.tx_utilization_pct", "value_type": "number", "value_number": 50.0,
+			"unit": "pct",
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if telemetry[0].Tags["unit"] != "pct" {
+		t.Fatalf("expected unit=pct preserved, got %q", telemetry[0].Tags["unit"])
+	}
+}
+
+func TestNormalizeMetrics_DoesNotAffectNonNumber(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.system.description", "value_type": "string", "value_string": "RouterOS",
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if len(telemetry) != 1 {
+		t.Fatalf("expected 1 telemetry, got %d", len(telemetry))
+	}
+	if telemetry[0].ValueString == nil || *telemetry[0].ValueString != "RouterOS" {
+		t.Fatalf("string value should be unchanged")
+	}
+}
+
+func TestNormalizeMetrics_ThresholdStillEvaluatedAfterNormalization(t *testing.T) {
+	p := PreprocessThresholdProcessor{Rules: []models.ThresholdRule{{
+		Metric:   "snmp.if.rx_utilization_pct",
+		Operator: ">",
+		Warning:  floatPtr(80),
+		Critical: floatPtr(95),
+		Tags:     map[string]string{"ifIndex": "1"},
+	}}}
+	// Clamped 98% should trigger critical.
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "snmp.if.rx_utilization_pct", "value_type": "number", "value_number": 98.0,
+			"tags": map[string]string{"ifIndex": "1"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if telemetry[0].Tags["threshold.status"] != "critical" {
+		t.Fatalf("expected critical, got %q", telemetry[0].Tags["threshold.status"])
+	}
+}
+
+func TestNormalizeMetrics_PassthroughDoesNotClampPercentageInRange(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	telemetry, err := p.Normalize(context.Background(), []models.RawSample{{
+		DeviceID: "d1", Source: "snmp", TS: time.Now().UTC(),
+		Fields: map[string]any{
+			"metric": "icmp.packet_loss_pct", "value_type": "number", "value_number": 3.5,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	val, ok := metricValue(telemetry, "icmp.packet_loss_pct")
+	if !ok {
+		t.Fatalf("expected metric")
+	}
+	if val != 3.5 {
+		t.Fatalf("expected 3.5 unchanged, got %v", val)
+	}
+}
+
 func hasMetric(items []models.Telemetry, metric string) bool {
 	for _, t := range items {
 		if t.Metric == metric {
@@ -345,6 +1067,19 @@ func hasMetricWithTag(items []models.Telemetry, metric, tagKey, tagVal string) b
 		}
 	}
 	return false
+}
+
+func metricValue(items []models.Telemetry, metric string) (float64, bool) {
+	for _, t := range items {
+		if t.Metric != metric {
+			continue
+		}
+		if t.ValueType != "number" || t.ValueNumber == nil {
+			return 0, false
+		}
+		return *t.ValueNumber, true
+	}
+	return 0, false
 }
 
 func floatPtr(v float64) *float64 {

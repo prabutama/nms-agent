@@ -12,5 +12,6 @@ Adapters convert canonical telemetry into platform-specific format.
 ## MVP Adapters
 
 - Terminal
+- TUI (Bubbletea-based terminal UI)
 - ThingsBoard MQTT
 - Generic MQTT

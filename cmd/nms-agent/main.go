@@ -5,7 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+	"time"
 
 	"nms-agent/internal/adapters"
 	"nms-agent/internal/collectors"
@@ -115,17 +118,42 @@ func run(args []string) int {
 		coll = cc
 	}
 
+	dc := core.DeliveryConfig{
+		MaxBatch:           loaded.Root.Agent.Delivery.MaxBatch,
+		DrainEnabled:       loaded.Root.Agent.Delivery.DrainEnabled,
+		MaxBatchesPerCycle: loaded.Root.Agent.Delivery.MaxBatchesPerCycle,
+		StopOnError:        loaded.Root.Agent.Delivery.StopOnError,
+	}
+	adapter, err := adapters.NewAdapter(loaded.Adapters.Adapters.Active, loaded.Adapters.Adapters.Configs)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+
 	p := core.NewPipeline(
 		coll,
 		&processors.PreprocessThresholdProcessor{Rules: loaded.Thresholds.Thresholds},
 		q,
-		adapters.NewTerminalAdapter(),
+		adapter,
+		dc,
 	)
-	if err := p.RunOnce(context.Background()); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		return 1
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	ticker := time.NewTicker(loaded.Root.Agent.PollInterval)
+	defer ticker.Stop()
+
+	for {
+		if err := p.RunOnce(ctx); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+		}
+		select {
+		case <-ctx.Done():
+			return 0
+		case <-ticker.C:
+		}
 	}
-	return 0
 }
 
 func buildCollector(mode string, loaded config.Loaded) (collectors.Collector, error) {

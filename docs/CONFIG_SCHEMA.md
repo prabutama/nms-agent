@@ -15,6 +15,12 @@ The configuration is YAML-based and split into multiple files.
 agent:
   poll_interval: 60s
 
+  delivery:
+    max_batch: 200
+    drain_enabled: true
+    max_batches_per_cycle: 20
+    stop_on_error: true
+
 paths:
   devices_dir: devices.d
   thresholds_file: thresholds.yml
@@ -24,6 +30,11 @@ paths:
 
 Notes:
 - `poll_interval` uses Go duration format (e.g. `10s`, `1m`).
+- `delivery.*` configures the queue delivery drain loop (Phase 8):
+  - `max_batch`: max items fetched per batch (default 100).
+  - `drain_enabled`: when true, keep delivering until queue empty or max_batches_per_cycle reached.
+  - `max_batches_per_cycle`: max delivery rounds per single poll cycle (default 10).
+  - `stop_on_error`: when true, abort on first send failure; otherwise continue draining.
 - `paths.*` may be relative to the directory containing `agent.yml`.
 - `${ENV_VAR}` expansion is supported for path strings via the current process environment.
 - `paths.queue_db` is the SQLite DB file path for the local durable queue. Its parent directory is created at runtime if missing.
@@ -59,13 +70,23 @@ thresholds:
       source: icmp
 ```
 
-## configs/adapters.yml (placeholder)
+## configs/adapters.yml
 
 ```yaml
 adapters:
   active: terminal
   configs: {}
 ```
+
+Supported adapter names:
+
+- `terminal`: print telemetry as log lines to stdout.
+- `tui`: interactive Bubbletea-based TUI with device health, alerts, and interface throughput (requires TTY).  
+  Optional configs:
+  - `refresh_interval`: TUI refresh rate (e.g. `1s`, default `1s`).
+  - `alt_screen`: use terminal alternate screen buffer (default `true`).
+  - `discard_output`: discard TUI output and disable input (headless/testing, default `false`).
+  - `disable_renderer`: disable Bubble Tea renderer (advanced/testing, default `false`).
 
 ## .env usage
 

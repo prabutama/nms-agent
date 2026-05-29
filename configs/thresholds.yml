@@ -20,3 +20,17 @@ thresholds:
     warning: 2
     tags:
       ifIndex: "*"
+
+  - metric: snmp.if.rx_utilization_pct
+    operator: ">"
+    warning: 70
+    critical: 90
+    tags:
+      ifIndex: "*"
+
+  - metric: snmp.if.tx_utilization_pct
+    operator: ">"
+    warning: 70
+    critical: 90
+    tags:
+      ifIndex: "*"

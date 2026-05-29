@@ -3,7 +3,7 @@ address: 10.10.10.150
 
 # Device metadata (future use for profiles/collectors).
 vendor: linux
-model: ubuntu
+model: proxmox
 
 # Enable real collectors (Phase 5 runtime selection).
 icmp:

@@ -1,5 +1,5 @@
 # Adapter runtime config is a later phase. This file exists so config loading/validation
 # has a stable path and can evolve without changing the loader contract.
 adapters:
-  active: terminal
+  active: tui
   configs: {}

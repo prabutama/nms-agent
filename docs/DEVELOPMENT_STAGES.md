@@ -107,7 +107,7 @@ For every implementation task, the AI coding agent must:
 | Implement terminal adapter | Print telemetry to terminal | DONE | Prints canonical telemetry lines |
 | Implement dummy collector | Generate dummy telemetry | DONE | Deterministic RawSample generator |
 | Implement minimal pipeline run | Collector → processor → queue stub → terminal adapter | DONE | One `RunOnce` demo pass |
-| Add `nms-agent run` | Agent can run manually | DONE | Runs config load+validate + one dummy pipeline pass |
+| Add `nms-agent run` | Agent can run manually | DONE | Runs config load+validate + periodic pipeline loop by `poll_interval` |
 | Add basic logging | Startup, telemetry, and error logs | TODO | |
 
 **Exit Criteria:**
@@ -190,12 +190,13 @@ For every implementation task, the AI coding agent must:
 
 | Task | Target Output | Status | Notes |
 |---|---|---|---|
-| Implement throughput calculation | Interface counter → throughput | TODO | |
-| Implement metric normalization | Raw values → canonical telemetry | TODO | |
+| Implement throughput calculation | Interface counter → throughput | DONE | Uses HC counters with fallback to 32-bit. Utilization fallback to high_speed_mbps when speed_bps=0. |
+| Implement metric normalization | Raw values → canonical telemetry | DONE | Clamp pct/[0,100], ms/≥0, seconds/≥0, bps/≥0, reachable→0/1. Unit default otomatis. |
 | Implement threshold loader | Load `thresholds.yml` | DONE | Threshold rules parsed in config loader |
 | Implement threshold evaluator | Warning/critical status | DONE | Preprocess processor tags telemetry |
-| Add threshold CLI | `nms-agentctl threshold set/list` | TODO | |
+| Add threshold CLI | `nms-agentctl threshold set/list` | DONE | --config agent.yml, upsert by metric+tags match |
 | Add tests | Preprocessing and threshold tests | DONE | Processor threshold unit tests |
+| Filter non-physical interface | Drop non-physical iface metrics based on multi-signal classifier | DONE | ifName pattern + ifConnectorPresent + ifType allowlist (6,71) |
 
 **Exit Criteria:**
 
@@ -205,16 +206,18 @@ For every implementation task, the AI coding agent must:
 
 ---
 
-## Phase 8 — MQTT Adapters
+## Phase 8 — Adapters
 
 **Target:** Send telemetry to platform consumers through MQTT.
 
 | Task | Target Output | Status | Notes |
 |---|---|---|---|
+| Implement TUI adapter | Bubbletea-based terminal UI monitoring | DONE | Device health, alerts, interface throughput |
+| Improve TUI dashboard | Responsive layout + focusable tables + accurate state | DONE | 2-pane wide/stacked narrow, tab focus, dedup alerts, headless tests |
+| Add free-like memory view | TUI menampilkan Mem/Swap ala `free` untuk Linux/Proxmox | DONE | UCD-SNMP-MIB (2021.4.*) untuk breakdown + fallback hrStorage |
+| Show ICMP latency/jitter | TUI menampilkan latency/jitter/loss per device | DONE | Berdasarkan metric ICMP collector (`icmp.latency_ms`, `icmp.jitter_ms`, `icmp.packet_loss_pct`) |
 | Implement Generic MQTT adapter | Send canonical telemetry JSON | TODO | |
 | Implement ThingsBoard MQTT adapter | Format `{deviceName,key,value,ts}` | TODO | |
-| Add QoS configuration | QoS can be configured | TODO | |
-| Add reconnect behavior | Adapter reconnects when connection drops | TODO | |
 | Add adapter health check | Adapter status can be queried | TODO | |
 | Add adapter tests | Formatting and send behavior are validated | TODO | |
 
@@ -743,4 +746,322 @@ Status update:
 - Phase 6: MikroTik profile string metrics -> DONE
 Notes:
 - Added system description/name and interface name metrics.
+
+2026-05-27 11:30
+Task: Add Linux SNMP profile
+Changed files:
+- profiles/linux.yml
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- Not run (profile + docs update)
+Status update:
+- Phase 6: Linux profile -> DONE
+Notes:
+- Linux profile includes identity, HOST-RESOURCES, and IF-MIB metrics.
+
+2026-05-27 11:45
+Task: Verify throughput prefers high-capacity counters
+Changed files:
+- internal/processors/preprocess_threshold_processor_test.go
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+Status update:
+- Phase 7: throughput calculation -> DONE
+Notes:
+- Added test to ensure HC counters are prioritized over 32-bit counters.
+
+2026-05-28 08:55
+Task: Keep nms-agent process alive for throughput delta calculation
+Changed files:
+- cmd/nms-agent/main.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+Status update:
+- Runtime: `nms-agent run` now polls continuously by `poll_interval`.
+Notes:
+- Throughput derived metrics require in-process previous counters; continuous loop preserves state between polls.
 ```
+
+2026-05-28 09:00
+Task: Utilization fallback speed (high_speed_mbps when speed_bps = 0)
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- configs/thresholds.yml
+- docs/DATA_CONTRACT.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- cmd /c make fmt
+- cmd /c make test
+- cmd /c make build
+- cmd /c make check
+Status update:
+- Phase 7: utilization fallback to snmp.if.high_speed_mbps -> DONE
+Notes:
+- Utilization now uses effective speed: speed_bps first, then high_speed_mbps × 1,000,000 as fallback.
+- Added tests: TestPreprocessThresholdProcessor_UsesHighSpeedMbpsFallback, TestPreprocessThresholdProcessor_PrefersSpeedBpsOverHighSpeedMbps.
+- Added default threshold rules for rx/tx_utilization_pct (warning 70%, critical 90%).
+
+2026-05-28 10:00
+Task: Physical interface filter (ifType=6 only)
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- profiles/standard.yml
+- profiles/vendor-example.yml
+- profiles/mikrotik-routeros.yml
+- profiles/linux.yml
+- docs/DATA_CONTRACT.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- go test ./...
+- go build ./...
+Status update:
+- Phase 7: non-physical interface filter -> DONE
+Notes:
+- snmp.if.type (ifType) added to all profiles (OID 1.3.6.1.2.1.2.2.1.3, walk, index).
+- Processor caches ifType per device+ifIndex; drops metrics for known non-physical interfaces.
+- Derived metrics (bps, utilization) also filtered for non-physical ifIndex.
+- Safe default: metrics with unknown ifType are preserved.
+- Added 4 tests: FiltersNonPhysicalInterfaces, KeepsPhysicalInterfaces, KeepsWhenIfTypeUnknown, FiltersDerivedMetricsForNonPhysical.
+```
+
+2026-05-28 11:00
+Task: Cross-platform physical interface classifier (ifName + ifConnectorPresent + ifType)
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- profiles/standard.yml
+- profiles/vendor-example.yml
+- profiles/mikrotik-routeros.yml
+- profiles/linux.yml
+- docs/DATA_CONTRACT.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- go test ./...
+- go build ./...
+Status update:
+- Phase 7: cross-platform physical interface classifier -> DONE
+Notes:
+- Added snmp.if.connector_present (OID 1.3.6.1.2.1.31.1.1.1.17) to all profiles.
+- Replaced simple ifType filter with multi-signal classifier:
+  1) ifName virtual pattern deny (Proxmox, Docker, K8s, etc.)
+  2) ifConnectorPresent=true keep
+  3) ifConnectorPresent=false drop
+  4) ifType allowlist (6=ethernet, 71=wifi) keep
+  5) ifType known but not allowlisted drop
+  6) Unknown signals keep (safe default)
+- Derived metrics (bps, utilization) automatically follow filter.
+- Added 9 new tests: Proxmox patterns, Docker/K8s patterns, physical names, connector present override, connector false drop, wifi ifType.
+```
+
+2026-05-28 12:00
+Task: Queue delivery drain loop (configurable drain, max_batch, max_batches_per_cycle, stop_on_error)
+Changed files:
+- internal/config/types.go
+- internal/core/pipeline.go
+- internal/core/pipeline_sqlite_test.go
+- cmd/nms-agent/main.go
+- configs/agent.yml
+- docs/CONFIG_SCHEMA.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- go build ./...
+- go test ./...
+Status update:
+- Phase 8: queue delivery drain loop -> DONE
+Notes:
+- Pipeline now supports configurable drain loop instead of single-batch delivery.
+- Per poll cycle: loop fetches pending items up to `max_batch`, sends, repeats until queue empty or `max_batches_per_cycle` reached.
+- stop_on_error controls behavior on send failure (abort vs continue).
+- Default config: max_batch=200, drain_enabled=true, max_batches_per_cycle=20, stop_on_error=true.
+
+Task: Threshold CLI (list + set with upsert)
+Changed files:
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/threshold.go
+- cmd/nms-agentctl/threshold_test.go
+- internal/config/types.go
+- internal/config/validate.go
+Validation:
+- go build ./cmd/nms-agentctl/...
+- go test -run 'TestThreshold|TestParseTags|TestTagsEqual|TestValidateThreshold' ./cmd/nms-agentctl/...
+Status update:
+- Phase 7: threshold CLI -> DONE
+Notes:
+- `nms-agentctl threshold list` reads thresholds.yml and prints each rule with metric/operator/warning/critical/tags.
+- `nms-agentctl threshold set` upserts a rule by metric+tags match; creates new or updates existing.
+- Config path resolved via agent.yml → paths.thresholds_file.
+- ResolvePath() helper added to internal/config/types.go for relative path resolution with env var expansion.
+- ValidateThresholdRules() added to internal/config/validate.go for isolated rule validation.
+- Write is atomic via temp-file-rename to avoid truncation on crash.
+
+2026-05-28 14:30
+Task: Metric normalization + E2E flow test
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- internal/core/pipeline_sqlite_test.go
+- docs/DATA_CONTRACT.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go build ./...
+- go test -run 'TestNormalizeMetrics' ./internal/processors/...
+- go test -run 'TestPipelineE2E' ./internal/core/...
+Status update:
+- Phase 7: metric normalization -> DONE
+Notes:
+- normalizeMetrics() added between physical filter and threshold evaluation.
+- Rules: _pct clamp [0,100], _ms/≥0, _seconds/≥0, _bps/≥0, icmp.reachable→0/1.
+- Unit defaults (pct, ms, s, bps) auto-filled when unit tag missing.
+- 10 unit tests: clamp percent >100 / <0, ms/seconds/bps non-negative, reachable binary, existing unit preserved, non-number passthrough, threshold-after-normalization, in-range passthrough.
+- 2 E2E pipeline tests: verify full collect→normalize→threshold→queue→adapter flow; string passthrough integrity.
+
+2026-05-28 15:00
+Task: TUI adapter (Bubbletea-based terminal UI)
+Changed files:
+- internal/adapters/tui_adapter.go
+- internal/adapters/tui_adapter_test.go
+- internal/adapters/factory.go
+- internal/adapters/port.go
+- cmd/nms-agent/main.go
+- docs/ADAPTER_CONTRACT.md
+- docs/CONFIG_SCHEMA.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- go build ./...
+- go test -run 'TestTUIAdapter' ./internal/adapters/...
+Status update:
+- Phase 8: TUI adapter -> DONE
+Notes:
+- New adapter `tui` selectable via `adapters.active: tui` in config.
+- Uses Bubbletea + Lipgloss for full-screen terminal UI.
+- Displays: cycle count, device health (up/down), queue stats, threshold alerts (warning/critical), interface throughput (top by utilization).
+- Factory `NewAdapter(name, config)` replaces hardcoded `NewTerminalAdapter()` in main.go.
+- Supports config key `refresh_interval` (default 1s).
+- Hotkeys: [q] quit, [h] help.
+
+2026-05-28 16:10
+Task: Improve TUI dashboard (responsive layout + accurate state)
+Changed files:
+- internal/adapters/tui_adapter.go
+- internal/adapters/tui_model.go
+- internal/adapters/tui_view.go
+- internal/adapters/tui_theme.go
+- internal/adapters/tui_keys.go
+- internal/adapters/tui_format.go
+- internal/adapters/tui_adapter_test.go
+- go.mod
+- go.sum
+- docs/CONFIG_SCHEMA.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- go fmt ./...
+- go build ./...
+- go test -count=1 ./...
+Status update:
+- Phase 8: TUI dashboard polish -> DONE
+Notes:
+- UI now uses Bubbles table + help for interactive panes (tab to switch focus, up/down navigation).
+- State is tracked per-device/per-interface (no counter drift) and alerts are deduplicated and sorted by severity/time.
+- Layout is responsive: 2-pane on wide terminals, stacked on narrow terminals.
+- Added TUI config flags: alt_screen, discard_output, disable_renderer (useful for tests/headless).
+- TUI tests now run headless to avoid ANSI/altscreen noise in test output.
+
+2026-05-29 16:30
+Task: TUI memory semantics + anti-overlap rendering
+Changed files:
+- internal/adapters/tui_model.go
+- internal/adapters/tui_view.go
+- internal/adapters/tui_format.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Notes:
+- Memory label fixed: `snmp.host.memory.size_kb` is total RAM (now shown as Memory Total).
+- Memory Used is estimated via hrStorage (`snmp.host.storage.*`) by matching storage size to total RAM.
+- Device list/detail panes use MaxWidth + truncation to avoid text wrapping into the other pane.
+
+2026-05-29 17:00
+Task: Linux profile hrStorage size/used units (enable memory used % on Proxmox)
+Changed files:
+- profiles/linux.yml
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Notes:
+- Linux profile now collects `snmp.host.storage.size_units` and `snmp.host.storage.used_units` (in addition to allocation_units).
+- This enables TUI to estimate Memory Used and percent via hrStorage matching.
+
+2026-05-29 17:20
+Task: Proxmox memory used percent (use hrStorageType RAM)
+Changed files:
+- profiles/linux.yml
+- internal/adapters/tui_model.go
+- internal/adapters/tui_view.go
+- internal/adapters/tui_format.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Notes:
+- Linux profile now also collects `snmp.host.storage.type` and `snmp.host.storage.description`.
+- TUI now prefers hrStorageType==hrStorageRam (`1.3.6.1.2.1.25.2.1.2`) when computing Memory Used.
+- Memory Used percent now shows 1 decimal (avoid misleading 0%).
+
+2026-05-29 18:00
+Task: Proxmox free-like memory breakdown (UCD-SNMP-MIB)
+Changed files:
+- profiles/linux.yml
+- internal/adapters/tui_model.go
+- internal/adapters/tui_view.go
+- internal/adapters/tui_format.go
+- docs/DATA_CONTRACT.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Notes:
+- Linux profile now collects optional UCD-SNMP-MIB memory/swap OIDs (memAvailReal, memSysAvail, memBuffer, memCached, memShared, memTotalSwap, memAvailSwap).
+- TUI shows Mem/Swap lines like `free` and computes used as `total - available` when UCD metrics are present; falls back to hrStorage heuristic otherwise.
+
+2026-05-29 18:20
+Task: TUI show ICMP latency/jitter/loss
+Changed files:
+- internal/adapters/tui_model.go
+- internal/adapters/tui_view.go
+- internal/adapters/tui_adapter_test.go
+- internal/collectors/dummy_collector.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Notes:
+- TUI Health section now shows `icmp.latency_ms`, `icmp.jitter_ms`, and `icmp.packet_loss_pct` per selected device.
+- Dummy collector now emits ICMP latency/jitter/loss so TUI demo mode shows these fields.

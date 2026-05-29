@@ -50,5 +50,27 @@
       ],
       "enabled": true
     }
+  },
+  "model": "lmstudio-dgx/qwen/qwen3.6-35b-a3b",
+  "small_model": "lmstudio-dgx/qwen/qwen3.6-35b-a3b",
+
+  "provider": {
+    "lmstudio-dgx": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio DGX",
+      "options": {
+        "baseURL": "http://10.10.10.34:1234/v1",
+        "apiKey": "lm-studio"
+      },
+      "models": {
+        "qwen/qwen3.6-35b-a3b": {
+          "name": "Qwen3.6 35B A3B on DGX",
+          "limit": {
+            "context": 262144,
+            "output": 16384
+          }
+        }
+      }
+    }
   }
 }
