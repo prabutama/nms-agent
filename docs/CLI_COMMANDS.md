@@ -3,6 +3,36 @@
 ## Validate Config
 nms-agentctl validate --config configs/agent.yml
 
+## Reload Agent
+
+Send SIGHUP to a running `nms-agent` process after validating config:
+
+nms-agentctl reload --config configs/agent.yml --pid <pid>
+
+## Device Commands
+nms-agentctl device list --config configs/agent.yml
+
+### Add a device
+nms-agentctl device add --config configs/agent.yml \
+  --id router-2 \
+  --address 192.0.2.2 \
+  --vendor mikrotik \
+  --model routeros \
+  --snmp=true \
+  --icmp=true
+
+### Update a device
+nms-agentctl device update --config configs/agent.yml \
+  --id router-2 \
+  --address 192.0.2.22 \
+  --icmp=false
+
+### Remove a device
+nms-agentctl device remove --config configs/agent.yml --id router-2
+
+### Test a device (SNMP/ICMP)
+nms-agentctl device test --config configs/agent.yml --id router-2
+
 ## Queue Commands
 nms-agentctl queue status --config configs/agent.yml
 nms-agentctl queue retry --config configs/agent.yml --limit 100

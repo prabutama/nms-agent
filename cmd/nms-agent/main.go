@@ -49,7 +49,13 @@ func run(args []string) int {
 		return 2
 	}
 
-	loaded, err := config.LoadFromFile(*configPath)
+	configAbs, err := filepath.Abs(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+
+	loaded, err := config.LoadFromFile(configAbs)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
@@ -66,7 +72,7 @@ func run(args []string) int {
 	adapters.SetOutputLocation(loc)
 
 	fmt.Fprintf(os.Stdout, "nms-agent starting\n")
-	fmt.Fprintf(os.Stdout, "config: %s\n", *configPath)
+	fmt.Fprintf(os.Stdout, "config: %s\n", configAbs)
 	fmt.Fprintf(os.Stdout, "poll_interval: %s\n", loaded.Root.Agent.PollInterval)
 	fmt.Fprintf(os.Stdout, "devices: %d\n", len(loaded.Devices))
 	fmt.Fprintf(os.Stdout, "adapter.active: %s\n", loaded.Adapters.Adapters.Active)
@@ -90,65 +96,70 @@ func run(args []string) int {
 	}
 	defer q.Close()
 
-	coll, err := buildCollector(*collectorMode, loaded)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		return 1
-	}
-
-	configAbs, err := filepath.Abs(*configPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		return 1
-	}
-	profilesDir := filepath.Join(filepath.Dir(configAbs), "..", "profiles")
-	profs, err := profiles.LoadDir(filepath.Clean(profilesDir))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		return 1
-	}
-	if err := profiles.ValidateAll(profs); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		return 1
-	}
-
-	if sc, ok := coll.(collectors.SNMPCollector); ok {
-		sc.Profiles = profs
-		coll = sc
-	} else if cc, ok := coll.(combinedCollector); ok {
-		for i, c := range cc.collectors {
-			if sc, ok := c.(collectors.SNMPCollector); ok {
-				sc.Profiles = profs
-				cc.collectors[i] = sc
-			}
+	buildPipeline := func(cfg config.Loaded, queuePath string, q queue.Queue) (*core.Pipeline, adapters.Adapter, error) {
+		coll, err := buildCollector(*collectorMode, cfg)
+		if err != nil {
+			return nil, nil, err
 		}
-		coll = cc
+		profilesDir := filepath.Join(filepath.Dir(configAbs), "..", "profiles")
+		profs, err := profiles.LoadDir(filepath.Clean(profilesDir))
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := profiles.ValidateAll(profs); err != nil {
+			return nil, nil, err
+		}
+		if sc, ok := coll.(collectors.SNMPCollector); ok {
+			sc.Profiles = profs
+			coll = sc
+		} else if cc, ok := coll.(combinedCollector); ok {
+			for i, c := range cc.collectors {
+				if sc, ok := c.(collectors.SNMPCollector); ok {
+					sc.Profiles = profs
+					cc.collectors[i] = sc
+				}
+			}
+			coll = cc
+		}
+
+		dc := core.DeliveryConfig{
+			MaxBatch:           cfg.Root.Agent.Delivery.MaxBatch,
+			DrainEnabled:       cfg.Root.Agent.Delivery.DrainEnabled,
+			MaxBatchesPerCycle: cfg.Root.Agent.Delivery.MaxBatchesPerCycle,
+			StopOnError:        cfg.Root.Agent.Delivery.StopOnError,
+		}
+		ad, err := adapters.NewAdapter(cfg.Adapters.Adapters.Active, cfg.Adapters.Adapters.Configs)
+		if err != nil {
+			return nil, nil, err
+		}
+		p := core.NewPipeline(
+			coll,
+			&processors.PreprocessThresholdProcessor{Rules: cfg.Thresholds.Thresholds},
+			q,
+			ad,
+			dc,
+		)
+		_ = queuePath
+		return p, ad, nil
 	}
 
-	dc := core.DeliveryConfig{
-		MaxBatch:           loaded.Root.Agent.Delivery.MaxBatch,
-		DrainEnabled:       loaded.Root.Agent.Delivery.DrainEnabled,
-		MaxBatchesPerCycle: loaded.Root.Agent.Delivery.MaxBatchesPerCycle,
-		StopOnError:        loaded.Root.Agent.Delivery.StopOnError,
-	}
-	adapter, err := adapters.NewAdapter(loaded.Adapters.Adapters.Active, loaded.Adapters.Adapters.Configs)
+	p, adapter, err := buildPipeline(loaded, queuePath, q)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
 	}
-
-	p := core.NewPipeline(
-		coll,
-		&processors.PreprocessThresholdProcessor{Rules: loaded.Thresholds.Thresholds},
-		q,
-		adapter,
-		dc,
-	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	ticker := time.NewTicker(loaded.Root.Agent.PollInterval)
+	reloadCh := make(chan os.Signal, 1)
+	if sigs := reloadSignals(); len(sigs) > 0 {
+		signal.Notify(reloadCh, sigs...)
+		defer signal.Stop(reloadCh)
+	}
+
+	pollInterval := loaded.Root.Agent.PollInterval
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -158,6 +169,41 @@ func run(args []string) int {
 		select {
 		case <-ctx.Done():
 			return 0
+		case <-reloadCh:
+			newLoaded, err := config.LoadFromFile(configAbs)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+				continue
+			}
+			if err := config.Validate(newLoaded); err != nil {
+				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+				continue
+			}
+			loc, err := config.LoadLocation(newLoaded.Root.Agent.Output.Timezone)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+				continue
+			}
+			adapters.SetOutputLocation(loc)
+
+			// Rebuild pipeline (queue remains opened).
+			newP, newAdapter, err := buildPipeline(newLoaded, queuePath, q)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+				continue
+			}
+			if c, ok := adapter.(adapters.Closable); ok {
+				_ = c.Close()
+			}
+			adapter = newAdapter
+			p = newP
+			if newLoaded.Root.Agent.PollInterval != pollInterval {
+				pollInterval = newLoaded.Root.Agent.PollInterval
+				ticker.Stop()
+				ticker = time.NewTicker(pollInterval)
+			}
+			fmt.Fprintf(os.Stdout, "reloaded config: devices=%d adapter.active=%s\n", len(newLoaded.Devices), newLoaded.Adapters.Adapters.Active)
+			continue
 		case <-ticker.C:
 		}
 	}

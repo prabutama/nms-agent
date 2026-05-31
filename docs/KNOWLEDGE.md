@@ -3,8 +3,10 @@
 | File                           | Peran                                                                                                                                              |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `go.mod`                       | Identitas modul Go. File ini menyimpan nama module, versi Go, dan dependency yang digunakan.                                                       |
-| `cmd/nms-agent/main.go`        | Entrypoint agent service. Memilih collector runtime via `--collector-mode`, adapter via factory (`terminal`/`tui`/`generic_mqtt`/`thingsboard_mqtt`), lalu menjalankan pipeline berulang sesuai `poll_interval`. |
-| `cmd/nms-agentctl/main.go`     | Entrypoint CLI admin. Menyediakan validate, queue, threshold, dan adapter health check.                                                           |
+| `cmd/nms-agent/main.go`        | Entrypoint agent service. Memilih collector runtime via `--collector-mode`, adapter via factory (`terminal`/`tui`/`generic_mqtt`/`thingsboard_mqtt`), menjalankan pipeline periodik, dan hot reload config via SIGHUP. |
+| `cmd/nms-agent/reload_signal_unix.go` | Platform helper (non-Windows): definisikan signal reload (SIGHUP).                                                                      |
+| `cmd/nms-agent/reload_signal_windows.go` | Platform helper (Windows): disable reload signal handling.                                                                            |
+| `cmd/nms-agentctl/main.go`     | Entrypoint CLI admin. Menyediakan validate, reload, device management, queue, threshold, dan adapter health check.                                 |
 | `internal/models/telemetry.go` | Definisi **canonical telemetry format** termasuk value_type dan value_number/value_string untuk data numerik maupun string.                        |
 | `internal/collectors/port.go`  | Kontrak/interface untuk collector. Nantinya SNMP collector dan ICMP collector harus mengikuti interface ini.                                       |
 | `internal/collectors/dummy_collector.go` | Dummy collector Phase 3. Menghasilkan raw sample deterministik (health ICMP + interface + resource) untuk demo pipeline tanpa SNMP/ICMP.    |
@@ -30,10 +32,16 @@
 | `internal/config/loader_test.go` | Unit test loader: path relatif + load devices directory.                                                                                        |
 | `internal/config/validate_test.go` | Unit test validator: field wajib + duplikasi device id.                                                                                        |
 | `cmd/nms-agentctl/validate.go` | Implementasi command `nms-agentctl validate` untuk load+validate config dan exit code yang sesuai.                                                |
+| `cmd/nms-agentctl/reload.go`   | Implementasi `nms-agentctl reload`: validasi config lalu trigger hot reload agent (kirim SIGHUP ke PID).                                          |
+| `cmd/nms-agentctl/reload_test.go` | Unit test reload CLI: memastikan arg wajib (`--pid`) divalidasi sebelum eksekusi signal.                                                      |
+| `cmd/nms-agentctl/reload_signal_unix.go` | Platform helper (non-Windows): kirim SIGHUP ke proses agent.                                                                          |
+| `cmd/nms-agentctl/reload_signal_windows.go` | Platform helper (Windows): reload via signal tidak didukung (arahkan pakai WSL/Linux).                                                 |
 | `cmd/nms-agentctl/queue_status.go` | Implementasi `nms-agentctl queue status` untuk menampilkan ringkasan queue SQLite (pending + max retry).                                    |
 | `cmd/nms-agentctl/queue_retry.go` | Implementasi `nms-agentctl queue retry` untuk mencoba mengirim batch pending dari SQLite queue lalu ack (delivered) atau increment retry (failed). |
 | `cmd/nms-agentctl/queue_retry_test.go` | Test CLI queue retry: seed SQLite queue lalu pastikan item pending terkirim dan terhapus.                                                |
 | `cmd/nms-agentctl/threshold.go` | Implementasi `nms-agentctl threshold list` dan `threshold set`. List baca thresholds.yml dan print rules. Set upsert by metric+tags match, tulis atomic ke YAML. |
+| `cmd/nms-agentctl/device.go`   | Implementasi `nms-agentctl device` subcommands: list/add/update/remove/test (validasi + atomic write/rollback untuk perubahan file di `devices.d`). |
+| `cmd/nms-agentctl/device_test.go` | Unit test device CLI: add/update/remove (write file baru, update field, hapus file) dan cek duplikasi id.                                       |
 | `internal/adapters/factory.go` | Factory adapter berdasarkan nama (`terminal`/`tui`/`generic_mqtt`/`thingsboard_mqtt`), dipanggil dari `cmd/nms-agent/main.go` gantikan hardcoded `NewTerminalAdapter()`. |
 | `internal/adapters/factory_test.go` | Unit test factory adapter: pastikan adapter yang didukung bisa dibuat (TUI headless) dan unknown name mengembalikan error.                     |
 | `internal/adapters/output_timezone.go` | Konfigurasi global timezone untuk output adapter (terminal/TUI/MQTT) berdasarkan `agent.output.timezone`.                                      |
@@ -53,7 +61,7 @@
 | `Makefile`                     | Target build sederhana untuk fmt/test/vet/build/check (utama untuk environment non-Windows).                                                       |
 | `make.bat`                     | Shim `make` untuk Windows. Mendukung target fmt/test/vet/build/check dengan memanggil perintah Go.                                                 |
 | `docs/FLOW.md`                 | Diagram arsitektur dan alur runtime agent (CLI, config load/validate, pipeline, SQLite queue, adapter send, retry).                                |
-| `docs/CLI_COMMANDS.md`         | Contoh command CLI `nms-agentctl` untuk validate, queue status/retry, adapter health, threshold list/set.                                          |
+| `docs/CLI_COMMANDS.md`         | Contoh command CLI `nms-agentctl` untuk validate, device list, queue status/retry, adapter health, threshold list/set.                            |
 | `docs/DATA_CONTRACT.md`        | Kontrak canonical telemetry (field wajib, tags threshold, derived metrics, normalization, termasuk hrStorage dan optional UCD memory/swap breakdown). |
 | `docs/CONFIG_SCHEMA.md`        | Dokumentasi schema config YAML (agent.yml/adapters.yml/devices/thresholds) dan opsi adapter (terminal/tui/generic_mqtt/thingsboard_mqtt).           |
 | `docs/ADAPTER_CONTRACT.md`     | Kontrak adapter: aturan boundary adapter terhadap queue dan canonical telemetry, daftar adapter MVP.                                                |

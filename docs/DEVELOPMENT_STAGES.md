@@ -87,8 +87,8 @@ For every implementation task, the AI coding agent must:
 | Add config validation | Validate config before the agent starts | DONE | Basic required fields + duplicate device IDs |
 | Add `nms-agentctl validate` | CLI config validation command | DONE | Loads config and exits non-zero on invalid |
 | Add `nms-agentctl status` | CLI agent status command | TODO | |
-| Add reload command | `nms-agentctl reload` triggers systemd reload | TODO | |
-| Add SIGHUP handler | Agent can hot reload configuration | TODO | |
+| Add reload command | `nms-agentctl reload` triggers systemd reload | DONE | Sends SIGHUP to running agent PID after config validation |
+| Add SIGHUP handler | Agent can hot reload configuration | DONE | Agent rebuilds runtime pipeline on SIGHUP |
 
 **Exit Criteria:**
 
@@ -235,13 +235,13 @@ For every implementation task, the AI coding agent must:
 
 | Task | Target Output | Status | Notes |
 |---|---|---|---|
-| Add device list | `nms-agentctl device list` | TODO | |
-| Add device add | `nms-agentctl device add` | TODO | |
-| Add device update | `nms-agentctl device update` | TODO | |
-| Add device remove | `nms-agentctl device remove` | TODO | |
-| Add device test | `nms-agentctl device test` | TODO | Test SNMP/ICMP |
-| Add validation before save | Invalid config is not saved | TODO | |
-| Auto reload after change | CLI can trigger reload | TODO | |
+| Add device list | `nms-agentctl device list` | DONE | Output tabular (id/address/vendor/model + snmp/icmp flags) |
+| Add device add | `nms-agentctl device add` | DONE | Validasi field wajib + tulis file atomic ke `devices.d/<id>.yml` |
+| Add device update | `nms-agentctl device update` | DONE | Update field terpilih + atomic replace + rollback saat validasi gagal |
+| Add device remove | `nms-agentctl device remove` | DONE | Hapus file device berdasarkan id + rollback jika validasi gagal |
+| Add device test | `nms-agentctl device test` | DONE | Smoke test ICMP (ping) + SNMP (profile-based walk/get) |
+| Add validation before save | Invalid config is not saved | DONE | `device add` menolak input invalid dan menolak duplikasi id sebelum write |
+| Auto reload after change | CLI can trigger reload | DONE | Manual `nms-agentctl reload --pid <pid>` triggers hot reload |
 
 **Exit Criteria:**
 
@@ -1176,3 +1176,75 @@ Validation:
 - make build
 Notes:
 - Added tests for adapter factory selection and adapter health CLI paths.
+
+2026-05-31 10:20
+Task: Phase 9 device list CLI
+Changed files:
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/device.go
+- docs/CLI_COMMANDS.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- make fmt
+- make test
+- make build
+- go run ./cmd/nms-agentctl device list --config configs/agent.yml
+Notes:
+- Added `nms-agentctl device list` to print loaded devices in a stable, tabular format.
+
+2026-05-31 10:40
+Task: Phase 9 device add CLI
+Changed files:
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/device.go
+- cmd/nms-agentctl/device_test.go
+- docs/CLI_COMMANDS.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- make fmt
+- make test
+- make build
+Notes:
+- Added `nms-agentctl device add` with required field validation, duplicate id check, atomic write, and rollback on post-write validation failure.
+
+2026-05-31 11:10
+Task: Phase 9 device update/remove/test CLI
+Changed files:
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/device.go
+- cmd/nms-agentctl/device_test.go
+- docs/CLI_COMMANDS.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- make fmt
+- make test
+- make build
+- go run ./cmd/nms-agentctl device list --config configs/agent.yml
+- go run ./cmd/nms-agentctl device test --config configs/agent.yml --id proxmox-ta --snmp=false --icmp=true
+Notes:
+- Added device update (atomic replace + rollback), remove (delete + rollback), and test (ICMP ping + SNMP profile-based collect) subcommands.
+
+2026-05-31 11:30
+Task: Manual reload command + SIGHUP hot reload
+Changed files:
+- cmd/nms-agent/main.go
+- cmd/nms-agent/reload_signal_unix.go
+- cmd/nms-agent/reload_signal_windows.go
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/reload.go
+- cmd/nms-agentctl/reload_test.go
+- cmd/nms-agentctl/reload_signal_unix.go
+- cmd/nms-agentctl/reload_signal_windows.go
+- docs/CLI_COMMANDS.md
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- make fmt
+- make test
+- make build
+Notes:
+- Added `nms-agentctl reload --pid <pid>` to validate config then send SIGHUP.
+- Agent now rebuilds runtime pipeline on SIGHUP (devices/thresholds/adapter/profiles), without restarting the process.
