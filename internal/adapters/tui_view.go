@@ -26,9 +26,10 @@ func (m tuiModel) View() string {
 }
 
 func (m tuiModel) headerView() string {
+	loc := getOutputLocation()
 	last := "never"
 	if !m.lastUpdate.IsZero() {
-		last = m.lastUpdate.Format("15:04:05")
+		last = m.lastUpdate.In(loc).Format("15:04:05")
 	}
 	age := ""
 	if !m.lastUpdate.IsZero() {
@@ -186,7 +187,8 @@ func (m tuiModel) deviceDetailView(width int) string {
 	} else {
 		b += "    Loss:      -\n"
 	}
-	b += fmt.Sprintf("    Last seen: %s\n", ds.LastSeen.Format("15:04:05"))
+	loc := getOutputLocation()
+	b += fmt.Sprintf("    Last seen: %s\n", ds.LastSeen.In(loc).Format("15:04:05"))
 
 	// Host Resources
 	b += "\n  Host Resources:\n"
@@ -244,7 +246,7 @@ func (m tuiModel) deviceDetailView(width int) string {
 			} else {
 				color = styleWarn.Render("WARNING")
 			}
-			line := fmt.Sprintf("    - %s=%s %s  %s", a.Metric, a.Value, stripANSI(color), a.Updated.Format("15:04:05"))
+			line := fmt.Sprintf("    - %s=%s %s  %s", a.Metric, a.Value, stripANSI(color), a.Updated.In(loc).Format("15:04:05"))
 			if width > 0 {
 				line = truncatePlain(line, width)
 			}

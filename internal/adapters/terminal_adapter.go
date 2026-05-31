@@ -34,10 +34,11 @@ func (a *TerminalAdapter) SendBatch(ctx context.Context, batch []models.Telemetr
 }
 
 func formatTS(ts time.Time) string {
+	loc := getOutputLocation()
 	if ts.IsZero() {
-		return time.Now().UTC().Format(time.RFC3339)
+		return time.Now().In(loc).Format(time.RFC3339)
 	}
-	return ts.UTC().Format(time.RFC3339)
+	return ts.In(loc).Format(time.RFC3339)
 }
 
 func formatTags(tags map[string]string) string {

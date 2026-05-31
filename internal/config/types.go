@@ -18,6 +18,13 @@ type Root struct {
 type Agent struct {
 	PollInterval time.Duration `yaml:"poll_interval"`
 	Delivery     Delivery      `yaml:"delivery"`
+	Output       Output        `yaml:"output"`
+}
+
+// Output configures presentation-only output settings.
+// It must not affect core persistence semantics (queue stores canonical telemetry).
+type Output struct {
+	Timezone string `yaml:"timezone"`
 }
 
 // Delivery configures the queue delivery drain loop (Phase 8).

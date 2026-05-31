@@ -10,7 +10,11 @@ func NewAdapter(name string, config map[string]any) (Adapter, error) {
 		return NewTerminalAdapter(), nil
 	case "tui":
 		return NewTUIAdapter(config)
+	case "generic_mqtt":
+		return NewGenericMQTTAdapter(config)
+	case "thingsboard_mqtt":
+		return NewThingsBoardMQTTAdapter(config)
 	default:
-		return nil, fmt.Errorf("unknown adapter %q (supported: terminal, tui)", name)
+		return nil, fmt.Errorf("unknown adapter %q (supported: terminal, tui, generic_mqtt, thingsboard_mqtt)", name)
 	}
 }

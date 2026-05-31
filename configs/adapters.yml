@@ -1,5 +1,23 @@
 # Adapter runtime config is a later phase. This file exists so config loading/validation
 # has a stable path and can evolve without changing the loader contract.
+
+
+# adapters:
+#   active: tui
+#   configs: {}
+
+# adapters:
+#   active: generic_mqtt
+#   configs:
+#     broker: tcp://127.0.0.1:1883
+#     topic: nms-agent/telemetry
+#     qos: 1
+#     retain: false
+#     strict_queue_mode: true
+
 adapters:
-  active: tui
-  configs: {}
+  active: thingsboard_mqtt
+  configs:
+    broker: tcp://127.0.0.1:1883
+    access_token: YOUR_GATEWAY_TOKEN
+    strict_queue_mode: true

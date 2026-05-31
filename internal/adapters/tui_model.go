@@ -617,9 +617,10 @@ func (m *tuiModel) rebuildTables() {
 	}
 
 	rows := make([]table.Row, 0, len(alerts))
+	loc := getOutputLocation()
 	for _, a := range alerts {
 		rows = append(rows, table.Row{
-			a.Updated.Format("15:04:05"),
+			a.Updated.In(loc).Format("15:04:05"),
 			a.Device,
 			truncate(a.Metric, 26),
 			truncate(a.Value, 10),

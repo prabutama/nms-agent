@@ -19,6 +19,12 @@ func Validate(cfg Loaded) error {
 	if cfg.Root.Agent.PollInterval <= 0 {
 		errs = append(errs, "agent.poll_interval must be > 0")
 	}
+	// Output timezone is presentation-only; validate if provided.
+	if tz := strings.TrimSpace(cfg.Root.Agent.Output.Timezone); tz != "" {
+		if _, err := LoadLocation(tz); err != nil {
+			errs = append(errs, "agent.output.timezone: "+err.Error())
+		}
+	}
 	// Paths fields should be present in agent.yml.
 	if strings.TrimSpace(cfg.Root.Paths.DevicesDir) == "" {
 		errs = append(errs, "paths.devices_dir is required")

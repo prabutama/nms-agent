@@ -216,10 +216,10 @@ For every implementation task, the AI coding agent must:
 | Improve TUI dashboard | Responsive layout + focusable tables + accurate state | DONE | 2-pane wide/stacked narrow, tab focus, dedup alerts, headless tests |
 | Add free-like memory view | TUI menampilkan Mem/Swap ala `free` untuk Linux/Proxmox | DONE | UCD-SNMP-MIB (2021.4.*) untuk breakdown + fallback hrStorage |
 | Show ICMP latency/jitter | TUI menampilkan latency/jitter/loss per device | DONE | Berdasarkan metric ICMP collector (`icmp.latency_ms`, `icmp.jitter_ms`, `icmp.packet_loss_pct`) |
-| Implement Generic MQTT adapter | Send canonical telemetry JSON | TODO | |
-| Implement ThingsBoard MQTT adapter | Format `{deviceName,key,value,ts}` | TODO | |
-| Add adapter health check | Adapter status can be queried | TODO | |
-| Add adapter tests | Formatting and send behavior are validated | TODO | |
+| Implement Generic MQTT adapter | Send canonical telemetry JSON | DONE | Publish 1 telemetry = 1 message ke topic statis (config: broker/topic/qos/retain/auth/timeout) |
+| Implement ThingsBoard MQTT adapter | ThingsBoard Gateway MQTT telemetry | DONE | Topic `v1/gateway/telemetry` (auth via access token), kirim metric + metadata tags/threshold |
+| Add adapter health check | Adapter status can be queried | DONE | `nms-agentctl adapter health` checks adapter connectivity without sending telemetry |
+| Add adapter tests | Formatting and send behavior are validated | DONE | Unit tests for MQTT adapters + factory + CLI adapter health |
 
 **Exit Criteria:**
 
@@ -1065,3 +1065,114 @@ Validation:
 Notes:
 - TUI Health section now shows `icmp.latency_ms`, `icmp.jitter_ms`, and `icmp.packet_loss_pct` per selected device.
 - Dummy collector now emits ICMP latency/jitter/loss so TUI demo mode shows these fields.
+
+2026-05-29 19:10
+Task: Phase 8 generic MQTT adapter (canonical JSON publish)
+Changed files:
+- internal/adapters/mqtt_generic_adapter.go
+- internal/adapters/mqtt_generic_adapter_test.go
+- internal/adapters/factory.go
+- go.mod
+- go.sum
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+- nms-agentctl validate --config configs/agent.yml
+Notes:
+- Added adapter `generic_mqtt` to publish canonical telemetry JSON (1 telemetry = 1 MQTT message) to a static topic.
+- Uses Eclipse Paho MQTT client; send failures bubble up so queue items remain pending for retry.
+
+2026-05-30 00:10
+Task: Configurable output timezone (presentation-only)
+Changed files:
+- internal/config/types.go
+- internal/config/timezone.go
+- internal/config/validate.go
+- cmd/nms-agent/main.go
+- internal/adapters/output_timezone.go
+- internal/adapters/terminal_adapter.go
+- internal/adapters/tui_view.go
+- internal/adapters/tui_model.go
+- internal/adapters/mqtt_generic_adapter.go
+- configs/agent.yml
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+- nms-agentctl validate --config configs/agent.yml
+Notes:
+- Added `agent.output.timezone` to render timestamps in all adapters (terminal/TUI/MQTT) using configured timezone.
+- Core/queue telemetry timestamps remain absolute instants (stored in UTC), only presentation changes.
+
+2026-05-30 00:30
+Task: Generic MQTT strict queue mode (Option A)
+Changed files:
+- internal/adapters/mqtt_generic_adapter.go
+- internal/adapters/mqtt_generic_adapter_test.go
+- configs/adapters.yml
+- docs/CONFIG_SCHEMA.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+- nms-agentctl validate --config configs/agent.yml
+Notes:
+- Added `strict_queue_mode` so adapter fail-fast on disconnect (SQLite queue pending reflects broker outage).
+
+2026-05-30 01:10
+Task: Phase 8 ThingsBoard MQTT adapter (Gateway API)
+Changed files:
+- internal/adapters/thingsboard_mqtt_adapter.go
+- internal/adapters/thingsboard_mqtt_adapter_test.go
+- internal/adapters/factory.go
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Notes:
+- Added adapter `thingsboard_mqtt` using ThingsBoard Gateway MQTT API topic `v1/gateway/telemetry` with gateway access token auth.
+- Telemetry payload carries metric value plus canonical metadata (`__value_type`, `__tags`) including threshold tags.
+
+2026-05-30 01:30
+Task: Adapter health check CLI
+Changed files:
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/adapter_health.go
+- internal/adapters/port.go
+- internal/adapters/mqtt_generic_adapter.go
+- internal/adapters/thingsboard_mqtt_adapter.go
+- docs/CLI_COMMANDS.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+- go run ./cmd/nms-agentctl adapter health --config configs/agent.yml
+Notes:
+- Added `nms-agentctl adapter health` to check active adapter connectivity (MQTT connect) without sending telemetry.
+
+2026-05-31 10:00
+Task: Adapter tests (factory + CLI)
+Changed files:
+- cmd/nms-agentctl/adapter_health_test.go
+- internal/adapters/factory_test.go
+- docs/DEVELOPMENT_STAGES.md
+- docs/KNOWLEDGE.md
+Validation:
+- make fmt
+- make test
+- make build
+Notes:
+- Added tests for adapter factory selection and adapter health CLI paths.

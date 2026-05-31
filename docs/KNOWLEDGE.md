@@ -3,8 +3,8 @@
 | File                           | Peran                                                                                                                                              |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `go.mod`                       | Identitas modul Go. File ini menyimpan nama module, versi Go, dan dependency yang digunakan.                                                       |
-| `cmd/nms-agent/main.go`        | Entrypoint agent service. Memilih collector runtime via `--collector-mode`, adapter via factory (`terminal`/`tui`), lalu menjalankan pipeline berulang sesuai `poll_interval`. |
-| `cmd/nms-agentctl/main.go`     | Entrypoint CLI admin. Nantinya dipakai untuk command seperti tambah device, cek status, queue status, reload, dan validasi config.                 |
+| `cmd/nms-agent/main.go`        | Entrypoint agent service. Memilih collector runtime via `--collector-mode`, adapter via factory (`terminal`/`tui`/`generic_mqtt`/`thingsboard_mqtt`), lalu menjalankan pipeline berulang sesuai `poll_interval`. |
+| `cmd/nms-agentctl/main.go`     | Entrypoint CLI admin. Menyediakan validate, queue, threshold, dan adapter health check.                                                           |
 | `internal/models/telemetry.go` | Definisi **canonical telemetry format** termasuk value_type dan value_number/value_string untuk data numerik maupun string.                        |
 | `internal/collectors/port.go`  | Kontrak/interface untuk collector. Nantinya SNMP collector dan ICMP collector harus mengikuti interface ini.                                       |
 | `internal/collectors/dummy_collector.go` | Dummy collector Phase 3. Menghasilkan raw sample deterministik (health ICMP + interface + resource) untuk demo pipeline tanpa SNMP/ICMP.    |
@@ -26,6 +26,7 @@
 | `internal/config/types.go`     | Definisi struct config (root agent.yml, device entry, placeholders thresholds/adapters) + `ResolvePath()` untuk relative path + env expansion, `Delivery.WithDefaults()`. |
 | `internal/config/loader.go`    | Loader konfigurasi YAML. Membaca `agent.yml`, memuat `devices.d/*.yml`, thresholds, adapters, dan resolve path dengan `filepath`.                   |
 | `internal/config/validate.go`  | Validasi dasar konfigurasi (field wajib, duplikasi device id, sanity-check YAML) + `ValidateThresholdRules()` untuk isolated rule validation.    |
+| `internal/config/timezone.go`  | Parser timezone config (`agent.output.timezone`) untuk presentation-only output (IANA atau fixed offset `UTC+7`).                                   |
 | `internal/config/loader_test.go` | Unit test loader: path relatif + load devices directory.                                                                                        |
 | `internal/config/validate_test.go` | Unit test validator: field wajib + duplikasi device id.                                                                                        |
 | `cmd/nms-agentctl/validate.go` | Implementasi command `nms-agentctl validate` untuk load+validate config dan exit code yang sesuai.                                                |
@@ -33,7 +34,11 @@
 | `cmd/nms-agentctl/queue_retry.go` | Implementasi `nms-agentctl queue retry` untuk mencoba mengirim batch pending dari SQLite queue lalu ack (delivered) atau increment retry (failed). |
 | `cmd/nms-agentctl/queue_retry_test.go` | Test CLI queue retry: seed SQLite queue lalu pastikan item pending terkirim dan terhapus.                                                |
 | `cmd/nms-agentctl/threshold.go` | Implementasi `nms-agentctl threshold list` dan `threshold set`. List baca thresholds.yml dan print rules. Set upsert by metric+tags match, tulis atomic ke YAML. |
-| `internal/adapters/factory.go` | Factory adapter berdasarkan nama (`terminal`/`tui`), dipanggil dari `cmd/nms-agent/main.go` gantikan hardcoded `NewTerminalAdapter()`.             |
+| `internal/adapters/factory.go` | Factory adapter berdasarkan nama (`terminal`/`tui`/`generic_mqtt`/`thingsboard_mqtt`), dipanggil dari `cmd/nms-agent/main.go` gantikan hardcoded `NewTerminalAdapter()`. |
+| `internal/adapters/factory_test.go` | Unit test factory adapter: pastikan adapter yang didukung bisa dibuat (TUI headless) dan unknown name mengembalikan error.                     |
+| `internal/adapters/output_timezone.go` | Konfigurasi global timezone untuk output adapter (terminal/TUI/MQTT) berdasarkan `agent.output.timezone`.                                      |
+| `internal/adapters/mqtt_generic_adapter.go` | Generic MQTT adapter Phase 8: publish canonical telemetry JSON ke broker MQTT (config: broker/topic/qos/retain/auth/timeout + `strict_queue_mode`). |
+| `internal/adapters/thingsboard_mqtt_adapter.go` | ThingsBoard MQTT adapter Phase 8: publish canonical telemetry ke ThingsBoard Gateway API (`v1/gateway/telemetry`) dengan metadata tags/threshold. |
 | `internal/adapters/tui_adapter.go` | Adapter TUI: parsing config, start Bubble Tea program, `SendBatch()` inject telemetry via `Program.Send()`, `Close()` quit.                      |
 | `internal/adapters/tui_model.go` | Model TUI: state per-device/per-interface, simpan health ICMP (reachable/latency/jitter/loss), dedup alerts, filter `snmp.if.*`, memory ala `free` (UCD) dengan fallback hrStorage. |
 | `internal/adapters/tui_view.go` | View/layout TUI: 2-pane (device list + detail), truncation/MaxWidth anti-overlap, render Health (reachable/latency/jitter/loss), resources+Mem/Swap ala `free`. |
@@ -41,13 +46,17 @@
 | `internal/adapters/tui_keys.go` | Keymap global TUI + integrasi help bubble (short/full).                                                                                      |
 | `internal/adapters/tui_format.go` | Helper format untuk throughput (bps -> K/M/Gbps) dan memory (KB -> Ki/Mi/Gi seperti `free -h`).                                                 |
 | `internal/adapters/tui_adapter_test.go` | Smoke test TUI adapter (headless): SendBatch berbagai metric, multiple batch, close tanpa send.                                         |
+| `internal/adapters/mqtt_generic_adapter_test.go` | Unit test generic MQTT adapter: validasi config + publish sukses/gagal/timeout tanpa broker real (fake client/token).                     |
+| `internal/adapters/thingsboard_mqtt_adapter_test.go` | Unit test ThingsBoard MQTT adapter: validasi config + payload shape + publish error/strict mode tanpa broker real.                      |
 | `go.sum`                       | Lockfile dependency Go modules hasil `go mod tidy`.                                                                                                |
 | `cmd/nms-agentctl/threshold_test.go` | Unit test threshold CLI: add new rule, update existing by metric+tags match, append for different tags, missing metric fail, list output, parseTags, tagsEqual, ValidateThresholdRules. |
 | `Makefile`                     | Target build sederhana untuk fmt/test/vet/build/check (utama untuk environment non-Windows).                                                       |
 | `make.bat`                     | Shim `make` untuk Windows. Mendukung target fmt/test/vet/build/check dengan memanggil perintah Go.                                                 |
 | `docs/FLOW.md`                 | Diagram arsitektur dan alur runtime agent (CLI, config load/validate, pipeline, SQLite queue, adapter send, retry).                                |
-| `docs/CLI_COMMANDS.md`         | Contoh command CLI `nms-agentctl` untuk validate, queue status/retry, threshold list/set.                                                          |
+| `docs/CLI_COMMANDS.md`         | Contoh command CLI `nms-agentctl` untuk validate, queue status/retry, adapter health, threshold list/set.                                          |
 | `docs/DATA_CONTRACT.md`        | Kontrak canonical telemetry (field wajib, tags threshold, derived metrics, normalization, termasuk hrStorage dan optional UCD memory/swap breakdown). |
-| `docs/CONFIG_SCHEMA.md`        | Dokumentasi schema config YAML (agent.yml/adapters.yml/devices/thresholds) dan opsi adapter (terminal/tui).                                         |
+| `docs/CONFIG_SCHEMA.md`        | Dokumentasi schema config YAML (agent.yml/adapters.yml/devices/thresholds) dan opsi adapter (terminal/tui/generic_mqtt/thingsboard_mqtt).           |
 | `docs/ADAPTER_CONTRACT.md`     | Kontrak adapter: aturan boundary adapter terhadap queue dan canonical telemetry, daftar adapter MVP.                                                |
 | `docs/DEVELOPMENT_STAGES.md`   | Checklist phase/stage pengembangan + development log + catatan validasi per task.                                                                  |
+| `cmd/nms-agentctl/adapter_health.go` | Implementasi `nms-agentctl adapter health` untuk cek konektivitas adapter aktif (MQTT connect) tanpa mengirim telemetry.                      |
+| `cmd/nms-agentctl/adapter_health_test.go` | Unit test `adapter health`: terminal ok, unknown adapter fail (menggunakan config temp).                                                     |

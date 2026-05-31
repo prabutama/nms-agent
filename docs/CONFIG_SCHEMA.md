@@ -15,6 +15,11 @@ The configuration is YAML-based and split into multiple files.
 agent:
   poll_interval: 60s
 
+  # Presentation timezone for adapter output only.
+  # Canonical telemetry timestamps are still stored as absolute instants.
+  output:
+    timezone: UTC
+
   delivery:
     max_batch: 200
     drain_enabled: true
@@ -30,6 +35,8 @@ paths:
 
 Notes:
 - `poll_interval` uses Go duration format (e.g. `10s`, `1m`).
+- `agent.output.timezone` controls presentation timezone for adapter output (terminal/TUI/MQTT). Default is `UTC`.
+  Supported values: IANA (e.g. `Asia/Jakarta`) or fixed offsets like `UTC+7`, `UTC+07:00`.
 - `delivery.*` configures the queue delivery drain loop (Phase 8):
   - `max_batch`: max items fetched per batch (default 100).
   - `drain_enabled`: when true, keep delivering until queue empty or max_batches_per_cycle reached.
@@ -87,6 +94,60 @@ Supported adapter names:
   - `alt_screen`: use terminal alternate screen buffer (default `true`).
   - `discard_output`: discard TUI output and disable input (headless/testing, default `false`).
   - `disable_renderer`: disable Bubble Tea renderer (advanced/testing, default `false`).
+
+- `generic_mqtt`: publish canonical telemetry JSON to an MQTT broker.
+  Required configs:
+  - `broker`: broker URL or host:port (e.g. `tcp://127.0.0.1:1883` or `127.0.0.1:1883`).
+  - `topic`: publish topic (e.g. `nms-agent/telemetry`).
+  Optional configs:
+  - `client_id`: MQTT client ID.
+  - `username`, `password`: broker auth.
+  - `qos`: `0|1|2` (default `1`).
+  - `retain`: retained publish flag (default `false`).
+  - `auto_reconnect`: enable auto reconnect (default `true`).
+  - `strict_queue_mode`: when true, fail-fast on disconnect so SQLite pending reflects broker outages (default `false`).
+  - `connect_timeout`: Go duration (default `5s`).
+  - `publish_timeout`: Go duration (default `5s`).
+
+Example:
+
+```yaml
+adapters:
+  active: generic_mqtt
+  configs:
+    broker: tcp://127.0.0.1:1883
+    topic: nms-agent/telemetry
+    qos: 1
+    retain: false
+    strict_queue_mode: true
+```
+
+- `thingsboard_mqtt`: publish canonical telemetry to ThingsBoard via Gateway MQTT API.
+  Required configs:
+  - `broker`: broker URL (e.g. `tcp://thingsboard.local:1883`).
+  - `access_token`: ThingsBoard gateway device access token.
+  Optional configs:
+  - `topic`: telemetry topic (default `v1/gateway/telemetry`).
+  - `client_id`: MQTT client ID.
+  - `qos`: `0|1|2` (default `1`).
+  - `retain`: (default `false`).
+  - `auto_reconnect`: (default `true`).
+  - `strict_queue_mode`: fail-fast on disconnect so SQLite pending reflects broker outages (default `false`).
+  - `connect_timeout`: Go duration (default `5s`).
+  - `publish_timeout`: Go duration (default `5s`).
+  Notes:
+  - Adapter will publish metric value plus metadata keys: `<metric>__value_type` and `<metric>__tags` (includes threshold tags like `threshold.status`).
+
+Example:
+
+```yaml
+adapters:
+  active: thingsboard_mqtt
+  configs:
+    broker: tcp://127.0.0.1:1883
+    access_token: YOUR_GATEWAY_TOKEN
+    strict_queue_mode: true
+```
 
 ## .env usage
 

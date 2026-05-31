@@ -58,12 +58,19 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
 	}
+	loc, err := config.LoadLocation(loaded.Root.Agent.Output.Timezone)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	adapters.SetOutputLocation(loc)
 
 	fmt.Fprintf(os.Stdout, "nms-agent starting\n")
 	fmt.Fprintf(os.Stdout, "config: %s\n", *configPath)
 	fmt.Fprintf(os.Stdout, "poll_interval: %s\n", loaded.Root.Agent.PollInterval)
 	fmt.Fprintf(os.Stdout, "devices: %d\n", len(loaded.Devices))
 	fmt.Fprintf(os.Stdout, "adapter.active: %s\n", loaded.Adapters.Adapters.Active)
+	fmt.Fprintf(os.Stdout, "output.timezone: %s\n", loc.String())
 	fmt.Fprintf(os.Stdout, "queue.db: %s\n", loaded.Root.Paths.QueueDB)
 	fmt.Fprintf(os.Stdout, "collector.mode: %s\n", *collectorMode)
 	fmt.Fprintln(os.Stdout)

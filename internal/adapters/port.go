@@ -11,3 +11,16 @@ import (
 type Adapter interface {
 	SendBatch(ctx context.Context, batch []models.Telemetry) error
 }
+
+// HealthChecker is an optional interface implemented by adapters that can
+// proactively verify connectivity (without sending telemetry).
+//
+// This is used by tooling (e.g., nms-agentctl) and must not modify queue state.
+type HealthChecker interface {
+	HealthCheck(ctx context.Context) error
+}
+
+// Closable is an optional interface implemented by adapters that hold resources.
+type Closable interface {
+	Close() error
+}

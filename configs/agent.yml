@@ -2,6 +2,10 @@ agent:
   # Polling interval used by the agent loop (future use).
   poll_interval: 60s
 
+  # Presentation timezone for adapter output only (canonical telemetry is still stored as UTC instants).
+  output:
+    timezone: UTC+7
+
   # Queue delivery loop configuration.
   delivery:
     max_batch: 200

@@ -7,6 +7,9 @@ nms-agentctl validate --config configs/agent.yml
 nms-agentctl queue status --config configs/agent.yml
 nms-agentctl queue retry --config configs/agent.yml --limit 100
 
+## Adapter Commands
+nms-agentctl adapter health --config configs/agent.yml
+
 ## Threshold Commands
 
 ### List all threshold rules

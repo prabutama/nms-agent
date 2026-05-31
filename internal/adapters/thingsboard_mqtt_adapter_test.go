@@ -1,0 +1,114 @@
+package adapters
+
+import (
+	"encoding/json"
+	"errors"
+	"testing"
+	"time"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
+
+	"nms-agent/internal/models"
+)
+
+type fakeTBMQTTClient struct {
+	connected bool
+	open      bool
+
+	connectToken mqtt.Token
+	publishToken mqtt.Token
+	publishes    []publishCall
+}
+
+func (c *fakeTBMQTTClient) IsConnected() bool      { return c.connected }
+func (c *fakeTBMQTTClient) IsConnectionOpen() bool { return c.open }
+func (c *fakeTBMQTTClient) Connect() mqtt.Token    { return c.connectToken }
+func (c *fakeTBMQTTClient) Disconnect(_ uint)      {}
+func (c *fakeTBMQTTClient) Publish(topic string, qos byte, retained bool, payload interface{}) mqtt.Token {
+	c.publishes = append(c.publishes, publishCall{topic: topic, qos: qos, retain: retained, payload: payload})
+	return c.publishToken
+}
+
+func TestParseThingsBoardMQTTConfig_RequiresBrokerAndToken(t *testing.T) {
+	if _, err := parseThingsBoardMQTTConfig(nil); err == nil {
+		t.Fatalf("expected error")
+	}
+	if _, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883"}); err == nil {
+		t.Fatalf("expected error")
+	}
+	if _, err := parseThingsBoardMQTTConfig(map[string]any{"access_token": "t"}); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_SendBatch_PayloadShape(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fcli := &fakeTBMQTTClient{connected: true, open: true, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+
+	val := 12.3
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "icmp.latency_ms", TS: time.Unix(10, 0).UTC(), ValueType: "number", ValueNumber: &val, Tags: map[string]string{"unit": "ms", "threshold.status": "ok"}}}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fcli.publishes) != 1 {
+		t.Fatalf("expected 1 publish")
+	}
+	b, ok := fcli.publishes[0].payload.([]byte)
+	if !ok {
+		t.Fatalf("expected payload []byte")
+	}
+	var m map[string][]map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	arr := m["d1"]
+	if len(arr) != 1 {
+		t.Fatalf("expected 1 telemetry entry")
+	}
+	if arr[0]["ts"] == nil {
+		t.Fatalf("expected ts")
+	}
+	vals, ok := arr[0]["values"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected values object")
+	}
+	if vals["icmp.latency_ms"] == nil {
+		t.Fatalf("expected metric key")
+	}
+	if vals["icmp.latency_ms__tags"] == nil {
+		t.Fatalf("expected tags key")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_SendBatch_PublishError(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fcli := &fakeTBMQTTClient{connected: true, open: true, publishToken: newFakeToken(errors.New("boom"), true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+	val := 1.0
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "m", TS: time.Now().UTC(), ValueType: "number", ValueNumber: &val}}
+	if err := a.SendBatch(nil, batch); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_StrictQueueMode_DisconnectFails(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token", "strict_queue_mode": true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fcli := &fakeTBMQTTClient{connected: true, open: false, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+	val := 1.0
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "m", TS: time.Now().UTC(), ValueType: "number", ValueNumber: &val}}
+	if err := a.SendBatch(nil, batch); err == nil {
+		t.Fatalf("expected error")
+	}
+}
