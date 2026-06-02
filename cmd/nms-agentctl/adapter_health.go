@@ -28,7 +28,7 @@ func runAdapter(args []string) int {
 func runAdapterHealth(args []string) int {
 	fs := flag.NewFlagSet("adapter health", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

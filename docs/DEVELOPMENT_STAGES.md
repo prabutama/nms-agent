@@ -1333,3 +1333,28 @@ Notes:
 - Updated systemd installer to copy all profiles from `profiles/` directory to `/etc/nms-agent/profiles`.
 - Updated systemd agent.yml to include `profiles_dir: /etc/nms-agent/profiles`.
 - This fix resolves the `open /etc/profiles: no such file or directory` error during service startup.
+
+2026-06-02 10:30
+Task: Phase 12C CLI default config path to /etc/nms-agent/agent.yml
+Changed files:
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/validate.go
+- cmd/nms-agentctl/device.go
+- cmd/nms-agentctl/queue_status.go
+- cmd/nms-agentctl/adapter_health.go
+- cmd/nms-agentctl/threshold.go
+- cmd/nms-agentctl/reload.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make vet
+- make build
+Status update:
+- Phase 12C: CLI default config path fix DONE
+Notes:
+- Changed default config path from configs/agent.yml to /etc/nms-agent/agent.yml in all CLI commands.
+- Updated usage examples in main.go and threshold.go to reflect new defaults.
+- Updated device test to use loaded.ProfilesDir instead of hardcoded ../profiles.
+- CLI commands now work without --config flag when config is at /etc/nms-agent/agent.yml.

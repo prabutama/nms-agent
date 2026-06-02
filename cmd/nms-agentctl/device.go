@@ -103,7 +103,7 @@ func findDeviceFileByID(devicesDir, id string) (string, error) {
 func runDeviceList(args []string) int {
 	fs := flag.NewFlagSet("device list", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -144,7 +144,7 @@ func runDeviceList(args []string) int {
 func runDeviceAdd(args []string) int {
 	fs := flag.NewFlagSet("device add", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	id := fs.String("id", "", "Device ID (unique)")
 	address := fs.String("address", "", "Device address (IP/host)")
 	vendor := fs.String("vendor", "", "Device vendor (for profile selection)")
@@ -242,7 +242,7 @@ func runDeviceAdd(args []string) int {
 func runDeviceUpdate(args []string) int {
 	fs := flag.NewFlagSet("device update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	id := fs.String("id", "", "Device ID (required)")
 	address := fs.String("address", "", "New address (optional)")
 	vendor := fs.String("vendor", "", "New vendor (optional)")
@@ -364,7 +364,7 @@ func runDeviceUpdate(args []string) int {
 func runDeviceRemove(args []string) int {
 	fs := flag.NewFlagSet("device remove", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	id := fs.String("id", "", "Device ID (required)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -424,7 +424,7 @@ func runDeviceRemove(args []string) int {
 func runDeviceTest(args []string) int {
 	fs := flag.NewFlagSet("device test", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	id := fs.String("id", "", "Device ID (required)")
 	var snmp triBool
 	var icmp triBool
@@ -535,7 +535,7 @@ func runDeviceTest(args []string) int {
 			return 2
 		}
 
-		profilesDir := filepath.Join(filepath.Dir(absCfg), "..", "profiles")
+		profilesDir := loaded.ProfilesDir
 		profs, err := profiles.LoadDir(filepath.Clean(profilesDir))
 		if err != nil {
 			fmt.Fprintf(os.Stdout, "snmp status=error reason=%q\n", err.Error())

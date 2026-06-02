@@ -32,18 +32,21 @@ func main() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl validate --config configs/agent.yml")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl reload --config configs/agent.yml --pid <pid>")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl device list --config configs/agent.yml")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl device add --config configs/agent.yml --id <id> --address <host> --vendor <v> --model <m> [--snmp=true] [--icmp=true]")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl device update --config configs/agent.yml --id <id> [--address <host>] [--vendor <v>] [--model <m>] [--snmp=true|false] [--icmp=true|false]")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl device remove --config configs/agent.yml --id <id>")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl device test --config configs/agent.yml --id <id> [--snmp=true|false] [--icmp=true|false]")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl queue status --config configs/agent.yml")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl queue retry --config configs/agent.yml [--limit 100]")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl adapter health --config configs/agent.yml")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold list --config configs/agent.yml")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold set --config configs/agent.yml --metric <name> --operator <op> [--warning <val>] [--critical <val>] [--tags k=v,k2=v2]")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl validate")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl reload --pid <pid>")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device list")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device add --id <id> --address <host> --vendor <v> --model <m> [--snmp=true] [--icmp=true]")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device update --id <id> [--address <host>] [--vendor <v>] [--model <m>] [--snmp=true|false] [--icmp=true|false]")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device remove --id <id>")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device test --id <id> [--snmp=true|false] [--icmp=true|false]")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl queue status")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl queue retry [--limit 100]")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl adapter health")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold list")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold set --metric <name> --operator <op> [--warning <val>] [--critical <val>] [--tags k=v,k2=v2]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Config default: /etc/nms-agent/agent.yml")
+	fmt.Fprintln(os.Stderr, "Override with: --config <path>")
 }
 
 func runQueue(args []string) int {

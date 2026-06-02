@@ -33,14 +33,17 @@ func runThreshold(args []string) int {
 
 func thresholdUsage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold list --config configs/agent.yml")
-	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold set --config configs/agent.yml --metric <name> --operator <op> [--warning <val>] [--critical <val>] [--tags k=v,k2=v2]")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold list")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold set --metric <name> --operator <op> [--warning <val>] [--critical <val>] [--tags k=v,k2=v2]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Config default: /etc/nms-agent/agent.yml")
+	fmt.Fprintln(os.Stderr, "Override with: --config <path>")
 }
 
 func runThresholdList(args []string) int {
 	fs := flag.NewFlagSet("threshold list", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -83,7 +86,7 @@ func runThresholdList(args []string) int {
 func runThresholdSet(args []string) int {
 	fs := flag.NewFlagSet("threshold set", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	metric := fs.String("metric", "", "Metric name (required)")
 	operator := fs.String("operator", "", "Operator: >, >=, <, <=, ==, !=")
 	warningRaw := fs.String("warning", "", "Warning threshold (optional, numeric)")

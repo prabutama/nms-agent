@@ -11,7 +11,7 @@ import (
 func runReload(args []string) int {
 	fs := flag.NewFlagSet("reload", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "configs/agent.yml", "Path to agent.yml")
+	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	pid := fs.Int("pid", 0, "PID of running nms-agent process")
 	if err := fs.Parse(args); err != nil {
 		return 2
