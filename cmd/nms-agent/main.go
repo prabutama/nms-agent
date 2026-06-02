@@ -158,6 +158,9 @@ func run(args []string) int {
 			ad,
 			dc,
 		)
+		if hub != nil {
+			p.SetObserver(hub)
+		}
 		_ = queuePath
 		return p, ad, nil
 	}
