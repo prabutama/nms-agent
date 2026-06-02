@@ -1,0 +1,9 @@
+# HQ — Application Server
+id: hq-app-server-1
+address: 10.0.0.10
+vendor: linux
+model: ubuntu
+icmp:
+  enabled: true
+snmp:
+  enabled: true

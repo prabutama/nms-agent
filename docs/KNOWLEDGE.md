@@ -66,5 +66,27 @@
 | `docs/CONFIG_SCHEMA.md`        | Dokumentasi schema config YAML (agent.yml/adapters.yml/devices/thresholds) dan opsi adapter (terminal/tui/generic_mqtt/thingsboard_mqtt).           |
 | `docs/ADAPTER_CONTRACT.md`     | Kontrak adapter: aturan boundary adapter terhadap queue dan canonical telemetry, daftar adapter MVP.                                                |
 | `docs/DEVELOPMENT_STAGES.md`   | Checklist phase/stage pengembangan + development log + catatan validasi per task.                                                                  |
+| `packaging/systemd/nms-agent.service` | Unit file systemd untuk menjalankan `nms-agent` sebagai service, termasuk `ExecReload` (SIGHUP).                                               |
+| `packaging/systemd/install.sh` | Script install systemd (build dari repo): setup user/dir, install config, install unit, enable+start service.                                       |
+| `packaging/systemd/README.md`  | Panduan operasi systemd: install, start/stop/reload, dan cara melihat log journald.                                                                 |
+| `packaging/systemd/agent.yml`  | Sample config untuk deployment systemd (path absolut `/etc`, `/var/lib`, dll).                                                                      |
+| `packaging/systemd/adapters.yml` | Sample adapter config untuk systemd deployment.                                                                                                   |
+| `packaging/systemd/thresholds.yml` | Sample thresholds file untuk systemd deployment.                                                                                                 |
+| `packaging/systemd/devices.d/example-linux-proxmox.yml` | Sample device entry untuk deployment (Linux/Proxmox).                                                                                  |
 | `cmd/nms-agentctl/adapter_health.go` | Implementasi `nms-agentctl adapter health` untuk cek konektivitas adapter aktif (MQTT connect) tanpa mengirim telemetry.                      |
 | `cmd/nms-agentctl/adapter_health_test.go` | Unit test `adapter health`: terminal ok, unknown adapter fail (menggunakan config temp).                                                     |
+| `README.md`                      | Dokumentasi utama proyek: quick start, install, config reference, CLI commands, arsitektur, dan demo guide.                                   |
+| `docs/TROUBLESHOOTING.md`        | Panduan troubleshooting: config errors, collector errors, queue errors, adapter errors, reload errors, systemd issues, dan performance.    |
+| `docs/SECURITY.md`               | Panduan keamanan: credential handling, file permissions, network security, TLS, queue data, dan known security considerations.               |
+| `configs/examples/hq-agent.yml`  | Contoh config agent untuk site HQ (poll 60s, delivery batch 200, timezone UTC+7).                                                           |
+| `configs/examples/hq-adapters.yml` | Contoh adapter ThingsBoard MQTT untuk site HQ.                                                                                             |
+| `configs/examples/hq-thresholds.yml` | Contoh threshold rules untuk site HQ (ICMP, interface, CPU, memory).                                                                   |
+| `configs/examples/branch-agent.yml` | Contoh config agent untuk site Branch (poll 120s, delivery batch 100, timezone UTC+7).                                                    |
+| `configs/examples/branch-adapters.yml` | Contoh adapter Generic MQTT untuk site Branch (forward ke central broker).                                                               |
+| `configs/examples/branch-thresholds.yml` | Contoh threshold rules untuk site Branch (threshold lebih longgar dari HQ).                                                              |
+| `configs/examples/hq-devices/hq-core-router.yml` | Contoh device config: core router MikroTik di HQ.                                                                                          |
+| `configs/examples/hq-devices/hq-dist-switch.yml` | Contoh device config: distribution switch Cisco Catalyst di HQ.                                                                            |
+| `configs/examples/hq-devices/hq-app-server.yml` | Contoh device config: server Ubuntu di HQ.                                                                                                 |
+| `configs/examples/branch-devices/branch-edge-router.yml` | Contoh device config: edge router MikroTik di branch.                                                                                      |
+| `configs/examples/branch-devices/branch-access-switch.yml` | Contoh device config: access switch Cisco di branch.                                                                                       |
+| `packaging/RELEASE.md`           | Panduan release: build commands (Linux amd64/arm64, Windows), release package contents, deployment checklist, dan verification commands.    |

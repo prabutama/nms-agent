@@ -1,0 +1,19 @@
+agent:
+  poll_interval: 60s
+
+  # Presentation timezone for adapter output only.
+  output:
+    timezone: UTC
+
+  # Queue delivery loop configuration.
+  delivery:
+    max_batch: 200
+    drain_enabled: true
+    max_batches_per_cycle: 20
+    stop_on_error: true
+
+paths:
+  devices_dir: /etc/nms-agent/devices.d
+  thresholds_file: /etc/nms-agent/thresholds.yml
+  adapters_file: /etc/nms-agent/adapters.yml
+  queue_db: /var/lib/nms-agent/queue.db

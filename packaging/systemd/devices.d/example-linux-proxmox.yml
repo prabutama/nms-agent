@@ -1,0 +1,10 @@
+id: proxmox-1
+address: 192.0.2.10
+
+vendor: linux
+model: proxmox
+
+icmp:
+  enabled: true
+snmp:
+  enabled: true

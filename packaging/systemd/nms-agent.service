@@ -1,0 +1,26 @@
+[Unit]
+Description=NMS Agent (Store-and-Forward Monitoring)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nms-agent
+Group=nms-agent
+
+WorkingDirectory=/etc/nms-agent
+
+ExecStart=/opt/nms-agent/nms-agent run --config /etc/nms-agent/agent.yml --collector-mode auto
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/nms-agent /var/log/nms-agent
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+# HQ Site — ThingsBoard MQTT Adapter
+# Use this config on the gateway at the main office.
+
+adapters:
+  active: thingsboard_mqtt
+  configs:
+    broker: tcp://127.0.0.1:1883
+    access_token: YOUR_THINGSBOARD_GATEWAY_TOKEN
+    strict_queue_mode: true

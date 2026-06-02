@@ -1,0 +1,9 @@
+# Branch — Edge Router
+id: branch-edge-router-1
+address: 172.16.0.1
+vendor: mikrotik
+model: routerboard
+icmp:
+  enabled: true
+snmp:
+  enabled: true

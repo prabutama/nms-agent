@@ -1,0 +1,11 @@
+# Branch Site — Generic MQTT Adapter
+# Use this config on branch gateways that forward to a central MQTT broker.
+
+adapters:
+  active: generic_mqtt
+  configs:
+    broker: tcp://central-broker.example.com:1883
+    topic: nms-agent/branch/telemetry
+    qos: 1
+    retain: false
+    strict_queue_mode: true
