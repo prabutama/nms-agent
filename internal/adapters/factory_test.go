@@ -3,17 +3,8 @@ package adapters
 import "testing"
 
 func TestNewAdapter_SupportedNames(t *testing.T) {
-	// terminal
-	ad, err := NewAdapter("terminal", nil)
-	if err != nil {
-		t.Fatalf("terminal: %v", err)
-	}
-	if ad == nil {
-		t.Fatalf("terminal: nil adapter")
-	}
-
 	// tui (headless)
-	ad, err = NewAdapter("tui", map[string]any{"alt_screen": false, "discard_output": true, "disable_renderer": true})
+	ad, err := NewAdapter("tui", map[string]any{"alt_screen": false, "discard_output": true, "disable_renderer": true})
 	if err != nil {
 		t.Fatalf("tui: %v", err)
 	}

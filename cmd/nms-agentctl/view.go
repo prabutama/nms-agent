@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"nms-agent/internal/adapters"
 	"nms-agent/internal/config"
 	"nms-agent/internal/models"
 	"nms-agent/internal/viewer"
@@ -15,7 +16,13 @@ func runView(args []string) int {
 	fs := flag.NewFlagSet("view", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
+	mode := fs.String("mode", "summary", "View mode: summary or raw")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	if *mode != "summary" && *mode != "raw" {
+		fmt.Fprintf(os.Stderr, "invalid mode %q (expected summary or raw)\n", *mode)
 		return 2
 	}
 
@@ -47,88 +54,84 @@ func runView(args []string) int {
 		}
 
 		if msg.Type == "snapshot" {
-			renderSnapshot(msg.Adapter, msg.Telemetry, loc)
+			if *mode == "summary" {
+				renderSummary(msg.Adapter, msg.Telemetry, loc)
+			} else {
+				renderRawSnapshot(msg.Adapter, msg.Telemetry, loc)
+			}
 		} else if msg.Type == "telemetry" {
-			renderTelemetry(msg.Adapter, msg.Telemetry, msg.At, loc)
+			if *mode == "summary" {
+				renderSummaryUpdate(msg.Adapter, msg.Telemetry, msg.At, loc)
+			} else {
+				renderRawTelemetry(msg.Adapter, msg.Telemetry, msg.At, loc)
+			}
 		} else if msg.Type == "status" {
 			renderStatus(msg.Adapter, msg.Status, msg.Details, msg.At, loc)
 		}
 	}
 }
 
-func renderSnapshot(adapter string, telemetry []models.Telemetry, loc *time.Location) {
+func renderSummary(adapter string, telemetry []models.Telemetry, loc *time.Location) {
+	st := adapters.NewStateFromTelemetry(telemetry)
+	loc2 := loc
+	if loc2 == nil {
+		loc2 = time.Local
+	}
+
+	fmt.Fprintf(os.Stdout, "=== Summary (adapter: %s) ===\n", adapter)
+
+	total, up, down, unknown := st.DeviceCounts()
+	fmt.Fprintf(os.Stdout, "  Devices: total=%d up=%d down=%d unknown=%d\n", total, up, down, unknown)
+
+	if len(telemetry) > 0 {
+		fmt.Fprintf(os.Stdout, "  Last update: %s\n", st.LastSeen.In(loc2).Format(time.RFC3339))
+	}
+
+	fmt.Fprintln(os.Stdout, "=== End Summary ===")
+}
+
+func renderSummaryUpdate(adapter string, telemetry []models.Telemetry, at time.Time, loc *time.Location) {
+	if len(telemetry) == 0 {
+		return
+	}
+	loc2 := loc
+	if loc2 == nil {
+		loc2 = time.Local
+	}
+	ts := at.In(loc2)
+	fmt.Fprintf(os.Stdout, "[%s] adapter=%s batch=%d devices=%s\n",
+		ts.Format(time.RFC3339),
+		adapter,
+		len(telemetry),
+		uniqueDevices(telemetry),
+	)
+}
+
+func renderRawSnapshot(adapter string, telemetry []models.Telemetry, loc *time.Location) {
 	fmt.Fprintf(os.Stdout, "=== Snapshot (adapter: %s) ===\n", adapter)
-	if adapter == "tui" {
-		for _, t := range telemetry {
-			ts := t.TS
-			if loc != nil {
-				ts = ts.In(loc)
-			}
-			fmt.Fprintf(os.Stdout, "  [%s] device=%s metric=%s value=%s\n",
-				ts.Format(time.RFC3339), t.DeviceID, t.Metric, formatValue(t))
+	for _, t := range telemetry {
+		ts := t.TS
+		if loc != nil {
+			ts = ts.In(loc)
 		}
-		fmt.Fprintln(os.Stdout, "  (TUI mode - use nms-agentctl view for terminal output)")
-	} else if adapter == "terminal" {
-		for _, t := range telemetry {
-			ts := t.TS
-			if loc != nil {
-				ts = ts.In(loc)
-			}
-			fmt.Fprintf(os.Stdout, "  %s device=%s metric=%s value=%s tags=%s\n",
-				ts.Format(time.RFC3339), t.DeviceID, t.Metric, formatValue(t), formatTags(t.Tags))
-		}
-	} else if adapter == "mqtt_generic" || adapter == "thingsboard_mqtt" {
-		fmt.Fprintf(os.Stdout, "  adapter=%s telemetry_count=%d\n", adapter, len(telemetry))
-		for _, t := range telemetry {
-			ts := t.TS
-			if loc != nil {
-				ts = ts.In(loc)
-			}
-			fmt.Fprintf(os.Stdout, "    %s device=%s metric=%s value=%s\n",
-				ts.Format(time.RFC3339), t.DeviceID, t.Metric, formatValue(t))
-		}
-	} else {
-		for _, t := range telemetry {
-			ts := t.TS
-			if loc != nil {
-				ts = ts.In(loc)
-			}
-			fmt.Fprintf(os.Stdout, "  %s device=%s metric=%s value=%s\n",
-				ts.Format(time.RFC3339), t.DeviceID, t.Metric, formatValue(t))
-		}
+		fmt.Fprintf(os.Stdout, "  %s device=%s metric=%s value=%s tags=%s\n",
+			ts.Format(time.RFC3339), t.DeviceID, t.Metric, formatValue(t), formatTags(t.Tags))
 	}
 	fmt.Fprintln(os.Stdout, "=== End Snapshot ===")
 }
 
-func renderTelemetry(adapter string, telemetry []models.Telemetry, at time.Time, loc *time.Location) {
+func renderRawTelemetry(adapter string, telemetry []models.Telemetry, at time.Time, loc *time.Location) {
 	ts := at
 	if loc != nil {
 		ts = ts.In(loc)
 	}
-	if adapter == "tui" {
-		fmt.Fprintf(os.Stdout, "[%s] TUI adapter received batch (count=%d)\n",
-			ts.Format(time.RFC3339), len(telemetry))
-	} else if adapter == "terminal" {
-		for _, t := range telemetry {
-			pts := t.TS
-			if loc != nil {
-				pts = pts.In(loc)
-			}
-			fmt.Fprintf(os.Stdout, "[%s] device=%s metric=%s value=%s tags=%s\n",
-				pts.Format(time.RFC3339), t.DeviceID, t.Metric, formatValue(t), formatTags(t.Tags))
+	for _, t := range telemetry {
+		pts := t.TS
+		if loc != nil {
+			pts = pts.In(loc)
 		}
-	} else if adapter == "mqtt_generic" || adapter == "thingsboard_mqtt" {
-		fmt.Fprintf(os.Stdout, "[%s] adapter=%s batch=%d devices=%s\n",
-			ts.Format(time.RFC3339), adapter, len(telemetry), uniqueDevices(telemetry))
-	} else {
-		for _, t := range telemetry {
-			pts := t.TS
-			if loc != nil {
-				pts = pts.In(loc)
-			}
-			fmt.Fprintf(os.Stdout, "[%s] device=%s metric=%s value=%s\n",
-				pts.Format(time.RFC3339), t.DeviceID, t.Metric, formatValue(t))
-		}
+		fmt.Fprintf(os.Stdout, "[%s] device=%s metric=%s value=%s tags=%s\n",
+			pts.Format(time.RFC3339), t.DeviceID, t.Metric, formatValue(t), formatTags(t.Tags))
 	}
 }
 

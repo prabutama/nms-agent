@@ -3,7 +3,7 @@
 | File                           | Peran                                                                                                                                              |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `go.mod`                       | Identitas modul Go. File ini menyimpan nama module, versi Go, dan dependency yang digunakan.                                                       |
-| `cmd/nms-agent/main.go`        | Entrypoint agent service. Memilih collector runtime via `--collector-mode`, adapter via factory (`terminal`/`tui`/`generic_mqtt`/`thingsboard_mqtt`), menjalankan pipeline periodik, dan hot reload config via SIGHUP. |
+| `cmd/nms-agent/main.go`        | Entrypoint agent service. Memilih collector runtime via `--collector-mode`, adapter via factory (`tui`/`generic_mqtt`/`thingsboard_mqtt`), menjalankan pipeline periodik, dan hot reload config via SIGHUP. |
 | `cmd/nms-agent/reload_signal_unix.go` | Platform helper (non-Windows): definisikan signal reload (SIGHUP).                                                                      |
 | `cmd/nms-agent/reload_signal_windows.go` | Platform helper (Windows): disable reload signal handling.                                                                            |
 | `cmd/nms-agentctl/main.go`     | Entrypoint CLI admin. Menyediakan validate, reload, device management, queue, threshold, dan adapter health check. Default config: `/etc/nms-agent/agent.yml`. |
@@ -42,7 +42,7 @@
 | `cmd/nms-agentctl/threshold.go` | Implementasi `nms-agentctl threshold list` dan `threshold set`. List baca thresholds.yml dan print rules. Set upsert by metric+tags match, tulis atomic ke YAML. |
 | `cmd/nms-agentctl/device.go`   | Implementasi `nms-agentctl device` subcommands: list/add/update/remove/test (validasi + atomic write/rollback untuk perubahan file di `devices.d`). |
 | `cmd/nms-agentctl/device_test.go` | Unit test device CLI: add/update/remove (write file baru, update field, hapus file) dan cek duplikasi id.                                       |
-| `internal/adapters/factory.go` | Factory adapter berdasarkan nama (`terminal`/`tui`/`generic_mqtt`/`thingsboard_mqtt`), dipanggil dari `cmd/nms-agent/main.go` gantikan hardcoded `NewTerminalAdapter()`. |
+| `internal/adapters/factory.go` | Factory adapter berdasarkan nama (`tui`/`generic_mqtt`/`thingsboard_mqtt`), dipanggil dari `cmd/nms-agent/main.go` gantikan hardcoded `NewTerminalAdapter()`. |
 | `internal/adapters/factory_test.go` | Unit test factory adapter: pastikan adapter yang didukung bisa dibuat (TUI headless) dan unknown name mengembalikan error.                     |
 | `internal/adapters/output_timezone.go` | Konfigurasi global timezone untuk output adapter (terminal/TUI/MQTT) berdasarkan `agent.output.timezone`.                                      |
 | `internal/adapters/mqtt_generic_adapter.go` | Generic MQTT adapter Phase 8: publish canonical telemetry JSON ke broker MQTT (config: broker/topic/qos/retain/auth/timeout + `strict_queue_mode`). |
@@ -54,6 +54,7 @@
 | `internal/adapters/tui_keys.go` | Keymap global TUI + integrasi help bubble (short/full).                                                                                      |
 | `internal/adapters/tui_format.go` | Helper format untuk throughput (bps -> K/M/Gbps) dan memory (KB -> Ki/Mi/Gi seperti `free -h`).                                                 |
 | `internal/adapters/tui_adapter_test.go` | Smoke test TUI adapter (headless): SendBatch berbagai metric, multiple batch, close tanpa send.                                         |
+| `internal/adapters/tui_state.go` | State shared antara TUI adapter dan CLI summary: reducer ApplyBatch, helper DeviceCounts/AlertCounts/SortedDevices/dll.                              |
 | `internal/adapters/mqtt_generic_adapter_test.go` | Unit test generic MQTT adapter: validasi config + publish sukses/gagal/timeout tanpa broker real (fake client/token).                     |
 | `internal/adapters/thingsboard_mqtt_adapter_test.go` | Unit test ThingsBoard MQTT adapter: validasi config + payload shape + publish error/strict mode tanpa broker real.                      |
 | `go.sum`                       | Lockfile dependency Go modules hasil `go mod tidy`.                                                                                                |

@@ -1424,4 +1424,38 @@ Notes:
 - Wired observer UpdateStatus with status+details in ThingsBoard MQTT adapter.
 - Implemented adapter-specific rendering in nms-agentctl view (tui/terminal/mqtt_generic/thingsboard_mqtt).
 - All validation passed: fmt, test, build.
+
+2026-06-03 13:00
+Task: Remove terminal adapter and implement view --mode summary/raw
+Changed files:
+- internal/adapters/tui_state.go
+- internal/adapters/tui_model.go
+- internal/adapters/tui_view.go
+- internal/adapters/tui_adapter.go
+- internal/adapters/factory.go
+- internal/adapters/factory_test.go
+- internal/adapters/tui_adapter_test.go
+- cmd/nms-agentctl/view.go
+- cmd/nms-agentctl/queue_retry.go
+- cmd/nms-agentctl/queue_retry_test.go
+- cmd/nms-agentctl/adapter_health.go
+- cmd/nms-agentctl/adapter_health_test.go
+- internal/config/validate_test.go
+- docs/KNOWLEDGE.md
+- docs/CONFIG_SCHEMA.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 12D: terminal adapter removal + view --mode DONE
+Notes:
+- Removed terminal adapter from factory and all CLI references.
+- Extracted shared State reducer from TUI model into internal/adapters/tui_state.go.
+- TUI adapter now uses shared State for telemetry reduction.
+- nms-agentctl view now supports --mode summary (default) and --mode raw.
+- summary mode shows device counts and last update timestamp.
+- raw mode shows full telemetry snapshot and live stream.
+- All tests pass and build succeeds.
 ```

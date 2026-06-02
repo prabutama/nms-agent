@@ -13,9 +13,12 @@ import (
 )
 
 type TUIAdapter struct {
-	program *tea.Program
-	done    chan struct{}
-	obs     AdapterObserver
+	program    *tea.Program
+	done       chan struct{}
+	obs        AdapterObserver
+	state      *State
+	cycle      int
+	lastUpdate time.Time
 }
 
 func (a *TUIAdapter) SetObserver(hub AdapterObserver) {
@@ -30,6 +33,9 @@ func (a *TUIAdapter) SendBatch(_ context.Context, batch []models.Telemetry) erro
 		if a.obs != nil {
 			a.obs.Update(batch)
 		}
+		a.state.ApplyBatch(batch)
+		a.cycle++
+		a.lastUpdate = time.Now().UTC()
 		a.program.Send(telemetryBatchMsg(batch))
 		return nil
 	}
@@ -103,7 +109,11 @@ func NewTUIAdapter(cfg map[string]any) (*TUIAdapter, error) {
 
 	p := tea.NewProgram(m, opts...)
 	done := make(chan struct{})
-	a := &TUIAdapter{program: p, done: done}
+	a := &TUIAdapter{
+		program: p,
+		done:    done,
+		state:   NewState(),
+	}
 
 	go func() {
 		if _, err := p.Run(); err != nil {

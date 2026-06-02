@@ -6,8 +6,6 @@ import "fmt"
 // config is adapter-specific (e.g., TUI options).
 func NewAdapter(name string, config map[string]any) (Adapter, error) {
 	switch name {
-	case "terminal":
-		return NewTerminalAdapter(), nil
 	case "tui":
 		return NewTUIAdapter(config)
 	case "generic_mqtt":
@@ -15,6 +13,6 @@ func NewAdapter(name string, config map[string]any) (Adapter, error) {
 	case "thingsboard_mqtt":
 		return NewThingsBoardMQTTAdapter(config)
 	default:
-		return nil, fmt.Errorf("unknown adapter %q (supported: terminal, tui, generic_mqtt, thingsboard_mqtt)", name)
+		return nil, fmt.Errorf("unknown adapter %q (supported: tui, generic_mqtt, thingsboard_mqtt)", name)
 	}
 }

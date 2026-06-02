@@ -10,8 +10,8 @@ func TestAdapterHealth_TerminalOK(t *testing.T) {
 	tmp := t.TempDir()
 	agentYml := writeAgentFiles(t, tmp, filepath.Join(tmp, "queue.db"), "thresholds: []\n")
 
-	// Override adapters.yml to terminal.
-	if err := os.WriteFile(filepath.Join(tmp, "adapters.yml"), []byte("adapters:\n  active: terminal\n  configs: {}\n"), 0o644); err != nil {
+	// Override adapters.yml to tui.
+	if err := os.WriteFile(filepath.Join(tmp, "adapters.yml"), []byte("adapters:\n  active: tui\n  configs: {}\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile adapters: %v", err)
 	}
 

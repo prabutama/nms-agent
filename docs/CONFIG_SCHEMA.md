@@ -35,7 +35,7 @@ paths:
 
 Notes:
 - `poll_interval` uses Go duration format (e.g. `10s`, `1m`).
-- `agent.output.timezone` controls presentation timezone for adapter output (terminal/TUI/MQTT). Default is `UTC`.
+- `agent.output.timezone` controls presentation timezone for adapter output (TUI/MQTT). Default is `UTC`.
   Supported values: IANA (e.g. `Asia/Jakarta`) or fixed offsets like `UTC+7`, `UTC+07:00`.
 - `delivery.*` configures the queue delivery drain loop (Phase 8):
   - `max_batch`: max items fetched per batch (default 100).
@@ -81,13 +81,12 @@ thresholds:
 
 ```yaml
 adapters:
-  active: terminal
+  active: tui
   configs: {}
 ```
 
 Supported adapter names:
 
-- `terminal`: print telemetry as log lines to stdout.
 - `tui`: interactive Bubbletea-based TUI with device health, alerts, and interface throughput (requires TTY).  
   Optional configs:
   - `refresh_interval`: TUI refresh rate (e.g. `1s`, default `1s`).

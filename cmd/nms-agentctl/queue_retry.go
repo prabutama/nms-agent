@@ -86,8 +86,18 @@ func runQueueRetry(args []string) int {
 
 func adapterFromConfig(cfg config.Loaded) (adapters.Adapter, error) {
 	active := cfg.Adapters.Adapters.Active
-	if active == "" || active == "terminal" {
-		return adapters.NewTerminalAdapter(), nil
+	if active == "" || active == "tui" {
+		// For queue retry, use a no-op adapter since we just need to validate the delivery path.
+		return &noopAdapter{}, nil
 	}
 	return nil, errors.New("adapter not implemented: " + active)
+}
+
+// noopAdapter is a no-op adapter used for queue retry testing.
+type noopAdapter struct{}
+
+func (a *noopAdapter) SendBatch(ctx context.Context, batch []models.Telemetry) error {
+	_ = ctx
+	_ = batch
+	return nil
 }

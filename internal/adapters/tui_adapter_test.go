@@ -139,7 +139,7 @@ func TestTUIModel_ICMPHealthMetrics(t *testing.T) {
 	}
 	m.applyBatch(batch)
 
-	ds, ok := m.devices["d1"]
+	ds, ok := m.state.Devices["d1"]
 	if !ok {
 		t.Fatalf("expected device state")
 	}

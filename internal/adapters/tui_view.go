@@ -2,7 +2,6 @@ package adapters
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -46,8 +45,8 @@ func (m tuiModel) headerView() string {
 }
 
 func (m tuiModel) summaryView() string {
-	total, up, down, unknown := m.deviceCounts()
-	wc, cc := m.alertCounts()
+	total, up, down, unknown := m.state.DeviceCounts()
+	wc, cc := m.state.AlertCounts()
 
 	return fmt.Sprintf("  Devices: total %d | up %d | down %d | unknown %d  |  Alerts: warning %d | critical %d\n",
 		total, up, down, unknown, wc, cc)
@@ -79,7 +78,7 @@ func (m tuiModel) bodyView() string {
 }
 
 func (m tuiModel) deviceListView(width int) string {
-	devs := m.sortedDevices()
+	devs := m.state.SortedDevices()
 	if len(devs) == 0 {
 		return styleDim.Render("  No devices yet")
 	}
@@ -104,7 +103,7 @@ func (m tuiModel) deviceListView(width int) string {
 	b += "  " + styleDivider.Render(strings.Repeat("-", devCol+1+statCol+1+alertCol+2)) + "\n"
 
 	for i, d := range devs {
-		ds := m.devices[d]
+		ds := m.state.Devices[d]
 		status := styleDim.Render("unknown")
 		if ds.Reachable != nil {
 			if *ds.Reachable {
@@ -113,7 +112,7 @@ func (m tuiModel) deviceListView(width int) string {
 				status = styleCrit.Render("down")
 			}
 		}
-		wc, cc := m.deviceAlertCounts(d)
+		wc, cc := m.state.DeviceAlertCounts(d)
 		alerts := "0"
 		if wc > 0 || cc > 0 {
 			alerts = fmt.Sprintf("W%d C%d", wc, cc)
@@ -135,13 +134,13 @@ func (m tuiModel) deviceDetailView(width int) string {
 		return styleDim.Render("\n  Select a device to see details")
 	}
 
-	devs := m.sortedDevices()
+	devs := m.state.SortedDevices()
 	if m.selected >= len(devs) {
 		m.selected = len(devs) - 1
 	}
 
 	name := devs[m.selected]
-	ds := m.devices[name]
+	ds := m.state.Devices[name]
 	if ds.LastSeen.IsZero() {
 		return styleDim.Render("\n  No data for this device yet")
 	}
@@ -192,7 +191,7 @@ func (m tuiModel) deviceDetailView(width int) string {
 
 	// Host Resources
 	b += "\n  Host Resources:\n"
-	res := m.deviceResources(name)
+	res := m.state.DeviceResources(name)
 	if res.CPU != nil {
 		b += fmt.Sprintf("    CPU Load:    %.1f%%\n", *res.CPU)
 	} else {
@@ -235,7 +234,7 @@ func (m tuiModel) deviceDetailView(width int) string {
 	}
 
 	// Alerts
-	da := m.deviceAlerts[name]
+	da := m.state.DeviceAlerts[name]
 	if len(da) > 0 {
 		b += "\n  Alerts:\n"
 		for _, a := range da {
@@ -261,7 +260,7 @@ func (m tuiModel) deviceDetailView(width int) string {
 	}
 
 	// Interfaces (stable identity, sorted by ifName)
-	ifaces := m.deviceInterfaces(name)
+	ifaces := m.state.DeviceInterfaces(name)
 	if len(ifaces) > 0 {
 		b += "\n  Interfaces:\n"
 		head := "Name       RX          TX          Util"
@@ -354,79 +353,25 @@ func (m tuiModel) helpView() string {
 }
 
 func (m tuiModel) sortedDevices() []string {
-	devs := make([]string, 0, len(m.devices))
-	for name := range m.devices {
-		devs = append(devs, name)
-	}
-	sort.Strings(devs)
-	return devs
+	return m.state.SortedDevices()
 }
 
 func (m tuiModel) deviceAlertCounts(name string) (warning, critical int) {
-	for _, a := range m.deviceAlerts[name] {
-		switch a.Status {
-		case "warning":
-			warning++
-		case "critical":
-			critical++
-		}
-	}
-	return warning, critical
+	return m.state.DeviceAlertCounts(name)
 }
 
 func (m tuiModel) deviceInterfaces(name string) []ifaceState {
-	var result []ifaceState
-	for ik, s := range m.ifaces {
-		if s.Device == name {
-			result = append(result, s)
-			_ = ik
-		}
-	}
-	// Sort by ifName for stable display
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].IfName != result[j].IfName {
-			return result[i].IfName < result[j].IfName
-		}
-		return result[i].IfIndex < result[j].IfIndex
-	})
-	if len(result) > 10 {
-		result = result[:10]
-	}
-	return result
+	return m.state.DeviceInterfaces(name)
 }
 
 func (m tuiModel) deviceResources(name string) deviceResources {
-	res, ok := m.deviceResourcesMap[name]
-	if !ok {
-		return deviceResources{}
-	}
-	return res
+	return m.state.DeviceResources(name)
 }
 
 func (m tuiModel) deviceCounts() (total, up, down, unknown int) {
-	total = len(m.devices)
-	for _, d := range m.devices {
-		if d.Reachable == nil {
-			unknown++
-			continue
-		}
-		if *d.Reachable {
-			up++
-		} else {
-			down++
-		}
-	}
-	return total, up, down, unknown
+	return m.state.DeviceCounts()
 }
 
 func (m tuiModel) alertCounts() (warning, critical int) {
-	for _, a := range m.alerts {
-		switch a.Status {
-		case "warning":
-			warning++
-		case "critical":
-			critical++
-		}
-	}
-	return warning, critical
+	return m.state.AlertCounts()
 }

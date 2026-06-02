@@ -51,7 +51,7 @@ func runAdapterHealth(args []string) int {
 	adapters.SetOutputLocation(loc)
 
 	active := loaded.Adapters.Adapters.Active
-	if active == "terminal" || active == "tui" {
+	if active == "tui" {
 		fmt.Fprintf(os.Stdout, "adapter=%s status=ok\n", active)
 		return 0
 	}
