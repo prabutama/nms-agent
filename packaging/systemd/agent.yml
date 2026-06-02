@@ -3,7 +3,7 @@ agent:
 
   # Presentation timezone for adapter output only.
   output:
-    timezone: UTC
+    timezone: UTC+07
 
   # Queue delivery loop configuration.
   delivery:

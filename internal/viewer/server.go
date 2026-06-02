@@ -61,6 +61,21 @@ func (s *Server) handle(conn net.Conn) {
 	defer s.Hub.Unsubscribe(updates)
 
 	writer := bufio.NewWriter(conn)
+	go func() {
+		for update := range s.Hub.statusCh {
+			msg := Message{
+				Type:    "status",
+				Adapter: s.Hub.Adapter(),
+				Status:  update.Status,
+				Details: update.Details,
+				At:      time.Now().UTC(),
+			}
+			if err := enc.Encode(msg); err != nil {
+				return
+			}
+			_ = writer.Flush()
+		}
+	}()
 	for batch := range updates {
 		msg := Message{
 			Type:      "telemetry",

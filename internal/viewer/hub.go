@@ -13,7 +13,14 @@ type Hub struct {
 	adapter     string
 	snapshot    []models.Telemetry
 	subscribers map[chan []models.Telemetry]struct{}
+	statusCh    chan StatusUpdate
 	provider    SnapshotProvider
+}
+
+// StatusUpdate carries adapter status and details for local viewing.
+type StatusUpdate struct {
+	Status  string
+	Details string
 }
 
 // SnapshotProvider can supply telemetry snapshot on demand.
@@ -25,6 +32,7 @@ func NewHub(adapter string) *Hub {
 	return &Hub{
 		adapter:     adapter,
 		subscribers: map[chan []models.Telemetry]struct{}{},
+		statusCh:    make(chan StatusUpdate, 16),
 	}
 }
 
@@ -101,4 +109,11 @@ func (h *Hub) Unsubscribe(ch chan []models.Telemetry) {
 	delete(h.subscribers, ch)
 	close(ch)
 	h.mu.Unlock()
+}
+
+func (h *Hub) UpdateStatus(status string, details string) {
+	select {
+	case h.statusCh <- StatusUpdate{Status: status, Details: details}:
+	default:
+	}
 }

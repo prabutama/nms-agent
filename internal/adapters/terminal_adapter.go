@@ -15,10 +15,15 @@ import (
 // TerminalAdapter prints canonical telemetry to a writer (stdout by default).
 type TerminalAdapter struct {
 	Out io.Writer
+	obs AdapterObserver
 }
 
 func NewTerminalAdapter() *TerminalAdapter {
 	return &TerminalAdapter{Out: os.Stdout}
+}
+
+func (a *TerminalAdapter) SetObserver(hub AdapterObserver) {
+	a.obs = hub
 }
 
 func (a *TerminalAdapter) SendBatch(ctx context.Context, batch []models.Telemetry) error {
@@ -29,6 +34,9 @@ func (a *TerminalAdapter) SendBatch(ctx context.Context, batch []models.Telemetr
 	for _, t := range batch {
 		fmt.Fprintf(a.Out, "%s device=%s metric=%s value=%s tags=%s\n",
 			formatTS(t.TS), t.DeviceID, t.Metric, formatValue(t), formatTags(t.Tags))
+	}
+	if a.obs != nil {
+		a.obs.Update(batch)
 	}
 	return nil
 }

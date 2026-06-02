@@ -1400,3 +1400,28 @@ Notes:
 - Summary display before save with confirmation prompt.
 - --interactive flag for forcing wizard even with some flags provided.
 - Non-interactive shell still shows clear error message.
+
+2026-06-03 12:00
+Task: Fix viewer status details and implement adapter-specific rendering
+Changed files:
+- internal/viewer/message.go
+- internal/viewer/hub.go
+- internal/viewer/server.go
+- internal/adapters/thingsboard_mqtt_adapter.go
+- cmd/nms-agentctl/view.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 12D: viewer status details + adapter-specific rendering DONE
+Notes:
+- Added Details field to viewer.Message for status detail display.
+- Updated Hub.StatusUpdate to carry both status and details.
+- Updated server.go to broadcast status details.
+- Wired observer UpdateStatus with status+details in ThingsBoard MQTT adapter.
+- Implemented adapter-specific rendering in nms-agentctl view (tui/terminal/mqtt_generic/thingsboard_mqtt).
+- All validation passed: fmt, test, build.
+```

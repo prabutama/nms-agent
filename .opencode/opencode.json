@@ -6,10 +6,6 @@
     "docs/PRD.md"
   ],
   "lsp": true,
-  "permission": {
-    "edit": "ask",
-    "bash": "ask"
-  },
   "watcher": {
     "ignore": [
       ".git/**",

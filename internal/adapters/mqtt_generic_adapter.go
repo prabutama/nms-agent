@@ -132,6 +132,11 @@ type genericMQTTClient interface {
 type GenericMQTTAdapter struct {
 	cfg    genericMQTTConfig
 	client genericMQTTClient
+	obs    AdapterObserver
+}
+
+func (a *GenericMQTTAdapter) SetObserver(hub AdapterObserver) {
+	a.obs = hub
 }
 
 func NewGenericMQTTAdapter(cfg map[string]any) (*GenericMQTTAdapter, error) {
@@ -186,9 +191,15 @@ func (a *GenericMQTTAdapter) SendBatch(ctx context.Context, batch []models.Telem
 		return nil
 	}
 	if err := a.ensureConnected(ctx); err != nil {
+		if a.obs != nil {
+			a.obs.UpdateStatus("connect_failed", err.Error())
+		}
 		return err
 	}
 	if a.cfg.StrictQueue && !(a.client.IsConnected() && a.client.IsConnectionOpen()) {
+		if a.obs != nil {
+			a.obs.UpdateStatus("not_connected", "broker unreachable")
+		}
 		return errors.New("mqtt not connected")
 	}
 
@@ -209,6 +220,10 @@ func (a *GenericMQTTAdapter) SendBatch(ctx context.Context, batch []models.Telem
 		if err := tok.Error(); err != nil {
 			return fmt.Errorf("mqtt publish: %w", err)
 		}
+	}
+	if a.obs != nil {
+		a.obs.Update(batch)
+		a.obs.UpdateStatus("published", fmt.Sprintf("count=%d", len(batch)))
 	}
 	return nil
 }

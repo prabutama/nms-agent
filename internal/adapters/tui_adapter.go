@@ -15,6 +15,36 @@ import (
 type TUIAdapter struct {
 	program *tea.Program
 	done    chan struct{}
+	obs     AdapterObserver
+}
+
+func (a *TUIAdapter) SetObserver(hub AdapterObserver) {
+	a.obs = hub
+}
+
+func (a *TUIAdapter) SendBatch(_ context.Context, batch []models.Telemetry) error {
+	select {
+	case <-a.done:
+		return nil
+	default:
+		if a.obs != nil {
+			a.obs.Update(batch)
+		}
+		a.program.Send(telemetryBatchMsg(batch))
+		return nil
+	}
+}
+
+func (a *TUIAdapter) Close() error {
+	if a == nil || a.program == nil {
+		return nil
+	}
+	a.program.Quit()
+	select {
+	case <-a.done:
+	case <-time.After(2 * time.Second):
+	}
+	return nil
 }
 
 type tuiConfig struct {
@@ -83,28 +113,6 @@ func NewTUIAdapter(cfg map[string]any) (*TUIAdapter, error) {
 	}()
 
 	return a, nil
-}
-
-func (a *TUIAdapter) SendBatch(_ context.Context, batch []models.Telemetry) error {
-	select {
-	case <-a.done:
-		return nil
-	default:
-		a.program.Send(telemetryBatchMsg(batch))
-		return nil
-	}
-}
-
-func (a *TUIAdapter) Close() error {
-	if a == nil || a.program == nil {
-		return nil
-	}
-	a.program.Quit()
-	select {
-	case <-a.done:
-	case <-time.After(2 * time.Second):
-	}
-	return nil
 }
 
 // For tests, allow overriding Bubble Tea output.

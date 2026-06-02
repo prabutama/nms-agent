@@ -24,3 +24,14 @@ type HealthChecker interface {
 type Closable interface {
 	Close() error
 }
+
+// ObserverSetter allows attaching a viewer hub for local viewing.
+type ObserverSetter interface {
+	SetObserver(hub AdapterObserver)
+}
+
+// AdapterObserver receives telemetry batches and status updates for local viewing.
+type AdapterObserver interface {
+	Update(batch []models.Telemetry)
+	UpdateStatus(status string, details string)
+}
