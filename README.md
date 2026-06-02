@@ -26,7 +26,7 @@ nms-agentctl queue retry --config configs/agent.yml
 ### From Source
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/prabutama/nms-agent
 cd nms-agent
 go build -o nms-agent ./cmd/nms-agent
 go build -o nms-agentctl ./cmd/nms-agentctl
