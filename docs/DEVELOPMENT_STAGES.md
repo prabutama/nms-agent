@@ -1385,3 +1385,18 @@ Notes:
 - Added pipeline.SetObserver for live telemetry updates.
 - Added nms-agentctl view command (snapshot + live update via Unix socket).
 - Updated systemd unit with RuntimeDirectory=nms-agent for socket path.
+
+2026-06-02 11:30
+Task: Phase 12E Interactive device add wizard
+Changed files:
+- cmd/nms-agentctl/device.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Status update:
+- Phase 12E: Interactive wizard DONE
+Notes:
+- Added automatic wizard detection when required flags missing on interactive terminal.
+- Wizard prompts: Device ID, Address, Vendor, Model, SNMP, ICMP with validation.
+- Summary display before save with confirmation prompt.
+- --interactive flag for forcing wizard even with some flags provided.
+- Non-interactive shell still shows clear error message.

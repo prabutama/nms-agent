@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -151,6 +152,7 @@ func runDeviceAdd(args []string) int {
 	model := fs.String("model", "", "Device model (for profile selection)")
 	snmpEnabled := fs.Bool("snmp", true, "Enable SNMP collection")
 	icmpEnabled := fs.Bool("icmp", true, "Enable ICMP collection")
+	interactive := fs.Bool("interactive", false, "Force interactive wizard mode")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -159,8 +161,12 @@ func runDeviceAdd(args []string) int {
 	*address = strings.TrimSpace(*address)
 	*vendor = strings.TrimSpace(*vendor)
 	*model = strings.TrimSpace(*model)
+
 	if *id == "" || *address == "" || *vendor == "" || *model == "" {
-		fmt.Fprintln(os.Stderr, "id, address, vendor, and model are required")
+		if *interactive || isInteractiveTerminal() {
+			return runDeviceAddInteractive(configPath, id, address, vendor, model, snmpEnabled, icmpEnabled)
+		}
+		fmt.Fprintln(os.Stderr, "id, address, vendor, and model are required (use --interactive for wizard)")
 		return 2
 	}
 
@@ -229,6 +235,146 @@ func runDeviceAdd(args []string) int {
 	}
 
 	// Re-validate full config after write to ensure loader can read it.
+	if err := config.ValidateFiles(absCfg); err != nil {
+		_ = os.Remove(outPath)
+		fmt.Fprintln(os.Stderr, "config validation after write failed (rolled back new device file): "+err.Error())
+		return 1
+	}
+
+	fmt.Fprintln(os.Stdout, "device added: "+outPath)
+	return 0
+}
+
+func isInteractiveTerminal() bool {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
+func runDeviceAddInteractive(configPath *string, id, address, vendor, model *string, snmpEnabled, icmpEnabled *bool) int {
+	reader := bufio.NewReader(os.Stdin)
+
+	prompt := func(label string) string {
+		for {
+			fmt.Fprintf(os.Stderr, "%s: ", label)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+			if input != "" {
+				return input
+			}
+			fmt.Fprintln(os.Stderr, "  cannot be empty, try again")
+		}
+	}
+
+	promptBool := func(label string, defaultVal bool) bool {
+		def := "Y"
+		if !defaultVal {
+			def = "N"
+		}
+		for {
+			fmt.Fprintf(os.Stderr, "%s [%s]: ", label, def)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(strings.ToLower(input))
+			if input == "" {
+				return defaultVal
+			}
+			switch input {
+			case "y", "yes", "1", "on":
+				return true
+			case "n", "no", "0", "off":
+				return false
+			default:
+				fmt.Fprintln(os.Stderr, "  please enter Y or N")
+			}
+		}
+	}
+
+	*id = prompt("Device ID")
+	*address = prompt("Address / IP")
+	*vendor = prompt("Vendor")
+	*model = prompt("Model")
+	*snmpEnabled = promptBool("Enable SNMP", true)
+	*icmpEnabled = promptBool("Enable ICMP", true)
+
+	fmt.Fprintln(os.Stderr, "\n--- Summary ---")
+	fmt.Fprintf(os.Stderr, "ID:      %s\n", *id)
+	fmt.Fprintf(os.Stderr, "Address: %s\n", *address)
+	fmt.Fprintf(os.Stderr, "Vendor:  %s\n", *vendor)
+	fmt.Fprintf(os.Stderr, "Model:   %s\n", *model)
+	fmt.Fprintf(os.Stderr, "SNMP:    %v\n", *snmpEnabled)
+	fmt.Fprintf(os.Stderr, "ICMP:    %v\n", *icmpEnabled)
+	fmt.Fprintln(os.Stderr, "---------------")
+
+	if !promptBool("Save device?", true) {
+		fmt.Fprintln(os.Stderr, "cancelled")
+		return 2
+	}
+
+	loaded, err := config.LoadFromFile(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	if err := config.Validate(loaded); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+
+	for _, d := range loaded.Devices {
+		if d.ID == *id {
+			fmt.Fprintln(os.Stderr, "device id already exists: "+*id)
+			return 1
+		}
+	}
+
+	absCfg, err := filepath.Abs(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	baseDir := filepath.Dir(absCfg)
+	devicesDir := config.ResolvePath(baseDir, loaded.Root.Paths.DevicesDir)
+	if err := os.MkdirAll(devicesDir, 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, "mkdir devices_dir: "+err.Error())
+		return 1
+	}
+
+	outPath := filepath.Join(devicesDir, *id+".yml")
+	if _, err := os.Stat(outPath); err == nil {
+		fmt.Fprintln(os.Stderr, "device file already exists: "+outPath)
+		return 1
+	} else if !os.IsNotExist(err) {
+		fmt.Fprintln(os.Stderr, "stat device file: "+err.Error())
+		return 1
+	}
+
+	dev := config.Device{
+		ID:      *id,
+		Address: *address,
+		Vendor:  *vendor,
+		Model:   *model,
+		SNMP:    config.DeviceSNMP{Enabled: *snmpEnabled},
+		ICMP:    config.DeviceICMP{Enabled: *icmpEnabled},
+	}
+	b, err := yaml.Marshal(dev)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "marshal device: "+err.Error())
+		return 1
+	}
+
+	tmpPath := filepath.Join(devicesDir, fmt.Sprintf(".%s.%d.tmp", *id, time.Now().UnixNano()))
+	if err := os.WriteFile(tmpPath, b, 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "write temp device file: "+err.Error())
+		return 1
+	}
+	if err := os.Rename(tmpPath, outPath); err != nil {
+		_ = os.Remove(tmpPath)
+		fmt.Fprintln(os.Stderr, "rename temp device file: "+err.Error())
+		return 1
+	}
+
 	if err := config.ValidateFiles(absCfg); err != nil {
 		_ = os.Remove(outPath)
 		fmt.Fprintln(os.Stderr, "config validation after write failed (rolled back new device file): "+err.Error())
