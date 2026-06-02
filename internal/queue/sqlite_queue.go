@@ -173,6 +173,45 @@ func (q *SQLiteQueue) MarkFailed(ctx context.Context, ids []string, reason strin
 	})
 }
 
+// Snapshot returns the latest queue items for local viewing.
+// It is read-only and does not change queue state.
+func (q *SQLiteQueue) Snapshot(ctx context.Context, limit int) ([]QueueItem, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := q.db.QueryContext(ctx,
+		"SELECT id, payload_json, retry_count, created_at FROM queue_items ORDER BY created_at DESC LIMIT ?",
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []QueueItem
+	for rows.Next() {
+		var (
+			id         string
+			payload    string
+			retryCount int
+			createdAt  string
+		)
+		if err := rows.Scan(&id, &payload, &retryCount, &createdAt); err != nil {
+			return nil, err
+		}
+		var t models.Telemetry
+		if err := json.Unmarshal([]byte(payload), &t); err != nil {
+			return nil, err
+		}
+		ct, _ := time.Parse(time.RFC3339Nano, createdAt)
+		out = append(out, QueueItem{ID: id, Telemetry: t, RetryCount: retryCount, CreatedAt: ct})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func execInTx(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

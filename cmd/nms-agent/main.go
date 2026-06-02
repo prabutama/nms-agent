@@ -18,6 +18,7 @@ import (
 	"nms-agent/internal/processors"
 	"nms-agent/internal/profiles"
 	"nms-agent/internal/queue"
+	"nms-agent/internal/viewer"
 )
 
 func main() {
@@ -96,12 +97,12 @@ func run(args []string) int {
 	}
 	defer q.Close()
 
-	buildPipeline := func(cfg config.Loaded, queuePath string, q queue.Queue) (*core.Pipeline, adapters.Adapter, error) {
+	buildPipeline := func(cfg config.Loaded, queuePath string, q queue.Queue, hub *viewer.Hub) (*core.Pipeline, adapters.Adapter, error) {
 		coll, err := buildCollector(*collectorMode, cfg)
 		if err != nil {
 			return nil, nil, err
 		}
-		profilesDir := loaded.ProfilesDir
+		profilesDir := cfg.ProfilesDir
 		profs, err := profiles.LoadDir(filepath.Clean(profilesDir))
 		if err != nil {
 			return nil, nil, err
@@ -132,6 +133,24 @@ func run(args []string) int {
 		if err != nil {
 			return nil, nil, err
 		}
+		if hub != nil {
+			hub.SetAdapter(cfg.Adapters.Adapters.Active)
+
+			// Wire queue snapshot provider
+			items, _ := q.(*queue.SQLiteQueue).Snapshot(context.Background(), 200)
+			var telemetry []models.Telemetry
+			for _, item := range items {
+				telemetry = append(telemetry, item.Telemetry)
+			}
+			hub.SetSnapshot(telemetry)
+
+			// Wire live observer
+			if p, ok := ad.(interface {
+				SetObserver(interface{ Update([]models.Telemetry) })
+			}); ok {
+				p.SetObserver(hub)
+			}
+		}
 		p := core.NewPipeline(
 			coll,
 			&processors.PreprocessThresholdProcessor{Rules: cfg.Thresholds.Thresholds},
@@ -143,14 +162,20 @@ func run(args []string) int {
 		return p, ad, nil
 	}
 
-	p, adapter, err := buildPipeline(loaded, queuePath, q)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	viewHub := viewer.NewHub(loaded.Adapters.Adapters.Active)
+	viewServer := &viewer.Server{SocketPath: "/run/nms-agent/view.sock", Hub: viewHub}
+	if err := viewServer.Listen(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "viewer server error: %v\n", err)
+	}
+
+	p, adapter, err := buildPipeline(loaded, queuePath, q, viewHub)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	reloadCh := make(chan os.Signal, 1)
 	if sigs := reloadSignals(); len(sigs) > 0 {
@@ -187,7 +212,7 @@ func run(args []string) int {
 			adapters.SetOutputLocation(loc)
 
 			// Rebuild pipeline (queue remains opened).
-			newP, newAdapter, err := buildPipeline(newLoaded, queuePath, q)
+			newP, newAdapter, err := buildPipeline(newLoaded, queuePath, q, viewHub)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
 				continue

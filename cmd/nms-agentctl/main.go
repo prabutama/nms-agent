@@ -24,6 +24,8 @@ func main() {
 		os.Exit(runThreshold(os.Args[2:]))
 	case "adapter":
 		os.Exit(runAdapter(os.Args[2:]))
+	case "view":
+		os.Exit(runView(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)

@@ -1358,3 +1358,30 @@ Notes:
 - Updated usage examples in main.go and threshold.go to reflect new defaults.
 - Updated device test to use loaded.ProfilesDir instead of hardcoded ../profiles.
 - CLI commands now work without --config flag when config is at /etc/nms-agent/agent.yml.
+
+2026-06-02 11:00
+Task: Phase 12D local viewer daemon + socket IPC
+Changed files:
+- internal/viewer/message.go
+- internal/viewer/hub.go
+- internal/viewer/server.go
+- internal/viewer/client.go
+- internal/queue/port.go
+- internal/queue/sqlite_queue.go
+- internal/core/pipeline.go
+- internal/adapters/port.go
+- cmd/nms-agent/main.go
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/view.go
+- packaging/systemd/nms-agent.service
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Status update:
+- Phase 12D: Viewer daemon + socket IPC DONE
+Notes:
+- Created internal/viewer package (message, hub, server, client) for local IPC.
+- Added Snapshot method to queue and queue.Observer interface.
+- Wired queue snapshot to viewer.Hub in daemon main.go.
+- Added pipeline.SetObserver for live telemetry updates.
+- Added nms-agentctl view command (snapshot + live update via Unix socket).
+- Updated systemd unit with RuntimeDirectory=nms-agent for socket path.

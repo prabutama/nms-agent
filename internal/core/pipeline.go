@@ -18,6 +18,7 @@ type Pipeline struct {
 	processor processors.Processor
 	queue     queue.Queue
 	adapter   adapters.Adapter
+	observer  interface{ Update([]models.Telemetry) }
 
 	MaxBatch           int
 	DrainEnabled       bool
@@ -51,6 +52,10 @@ func NewPipeline(c collectors.Collector, p processors.Processor, q queue.Queue, 
 	}
 }
 
+func (p *Pipeline) SetObserver(obs interface{ Update([]models.Telemetry) }) {
+	p.observer = obs
+}
+
 // RunOnce performs a single orchestration pass.
 // Reliability rule: telemetry is persisted to the queue before any adapter delivery attempt.
 func (p *Pipeline) RunOnce(ctx context.Context) error {
@@ -66,6 +71,9 @@ func (p *Pipeline) RunOnce(ctx context.Context) error {
 
 	if err := p.queue.EnqueueBatch(ctx, telemetry); err != nil {
 		return err
+	}
+	if p.observer != nil {
+		p.observer.Update(telemetry)
 	}
 
 	var lastErr error

@@ -24,3 +24,8 @@ type Queue interface {
 	MarkDelivered(ctx context.Context, ids []string) error
 	MarkFailed(ctx context.Context, ids []string, reason string) error
 }
+
+// Observer allows read-only access to queue telemetry for local viewing.
+type Observer interface {
+	Snapshot(ctx context.Context, limit int) ([]QueueItem, error)
+}

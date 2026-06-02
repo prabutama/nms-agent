@@ -8,6 +8,9 @@ Type=simple
 User=nms-agent
 Group=nms-agent
 
+RuntimeDirectory=nms-agent
+RuntimeDirectoryMode=0755
+
 WorkingDirectory=/etc/nms-agent
 
 ExecStart=/opt/nms-agent/nms-agent run --config /etc/nms-agent/agent.yml --collector-mode auto
@@ -20,7 +23,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/nms-agent /var/log/nms-agent
+ReadWritePaths=/var/lib/nms-agent /var/log/nms-agent /run/nms-agent
 
 [Install]
 WantedBy=multi-user.target

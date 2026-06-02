@@ -75,6 +75,11 @@
 | `packaging/systemd/devices.d/example-linux-proxmox.yml` | Sample device entry untuk deployment (Linux/Proxmox).                                                                                  |
 | `cmd/nms-agentctl/adapter_health.go` | Implementasi `nms-agentctl adapter health` untuk cek konektivitas adapter aktif (MQTT connect) tanpa mengirim telemetry.                      |
 | `cmd/nms-agentctl/adapter_health_test.go` | Unit test `adapter health`: terminal ok, unknown adapter fail (menggunakan config temp).                                                     |
+| `cmd/nms-agentctl/view.go`                 | Implementasi `nms-agentctl view` untuk connect ke daemon via Unix socket, menampilkan snapshot + live update telemetry.                      |
+| `internal/viewer/message.go`                 | Tipe pesan JSON untuk viewer client (`snapshot` / `telemetry`).                                                                             |
+| `internal/viewer/hub.go`                     | Hub lokal untuk menyimpan snapshot telemetry dan broadcast live update ke subscriber.                                                         |
+| `internal/viewer/server.go`                  | Unix socket server untuk daemon: menerima koneksi viewer, kirim snapshot + stream live.                                                        |
+| `internal/viewer/client.go`                  | Unix socket client untuk `nms-agentctl view`: connect, baca snapshot, subscribe live.                                                          |
 | `README.md`                      | Dokumentasi utama proyek: quick start, install, config reference, CLI commands, arsitektur, dan demo guide.                                   |
 | `docs/TROUBLESHOOTING.md`        | Panduan troubleshooting: config errors, collector errors, queue errors, adapter errors, reload errors, systemd issues, dan performance.    |
 | `docs/SECURITY.md`               | Panduan keamanan: credential handling, file permissions, network security, TLS, queue data, dan known security considerations.               |
