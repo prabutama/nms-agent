@@ -36,6 +36,12 @@ func LoadFromFile(path string) (Loaded, error) {
 	devicesDir := resolve(root.Paths.DevicesDir)
 	thresholdsFile := resolve(root.Paths.ThresholdsFile)
 	adaptersFile := resolve(root.Paths.AdaptersFile)
+	profilesDir := root.Paths.ProfilesDir
+	if profilesDir == "" {
+		profilesDir = filepath.Join(baseDir, "profiles")
+	} else {
+		profilesDir = resolve(profilesDir)
+	}
 
 	devices, err := loadDevicesDir(devicesDir)
 	if err != nil {
@@ -53,10 +59,11 @@ func LoadFromFile(path string) (Loaded, error) {
 	}
 
 	return Loaded{
-		Root:       root,
-		Devices:    devices,
-		Thresholds: thresholds,
-		Adapters:   adapters,
+		Root:        root,
+		Devices:     devices,
+		Thresholds:  thresholds,
+		Adapters:    adapters,
+		ProfilesDir: profilesDir,
 	}, nil
 }
 
@@ -69,6 +76,7 @@ func loadRoot(path string) (Root, error) {
 	root.Paths.ThresholdsFile = strings.TrimSpace(root.Paths.ThresholdsFile)
 	root.Paths.AdaptersFile = strings.TrimSpace(root.Paths.AdaptersFile)
 	root.Paths.QueueDB = strings.TrimSpace(root.Paths.QueueDB)
+	root.Paths.ProfilesDir = strings.TrimSpace(root.Paths.ProfilesDir)
 	return root, nil
 }
 

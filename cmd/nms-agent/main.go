@@ -101,7 +101,7 @@ func run(args []string) int {
 		if err != nil {
 			return nil, nil, err
 		}
-		profilesDir := filepath.Join(filepath.Dir(configAbs), "..", "profiles")
+		profilesDir := loaded.ProfilesDir
 		profs, err := profiles.LoadDir(filepath.Clean(profilesDir))
 		if err != nil {
 			return nil, nil, err

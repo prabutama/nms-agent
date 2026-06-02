@@ -90,3 +90,5 @@
 | `configs/examples/branch-devices/branch-edge-router.yml` | Contoh device config: edge router MikroTik di branch.                                                                                      |
 | `configs/examples/branch-devices/branch-access-switch.yml` | Contoh device config: access switch Cisco di branch.                                                                                       |
 | `packaging/RELEASE.md`           | Panduan release: build commands (Linux amd64/arm64, Windows), release package contents, deployment checklist, dan verification commands.    |
+| `internal/config/types.go`       | Definisi struct config (root agent.yml, device entry, placeholders thresholds/adapters) + `ResolvePath()` untuk relative path + env expansion, `Delivery.WithDefaults()`, `ProfilesDir` pada `Paths`. |
+| `internal/config/loader.go`      | Loader konfigurasi YAML. Membaca `agent.yml`, memuat `devices.d/*.yml`, thresholds, adapters, profiles, dan resolve path dengan `filepath`.   |

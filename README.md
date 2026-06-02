@@ -40,6 +40,38 @@ sudo systemctl status nms-agent
 sudo systemctl reload nms-agent
 ```
 
+## System Requirements
+
+- Linux server recommended for production deployment
+- Go 1.24.x for build from source
+- systemd for service-based deployment
+- Network access to:
+  - target devices via ICMP and SNMP (UDP/161)
+  - MQTT / ThingsBoard broker
+- Writable local storage for SQLite queue
+- WSL on Windows acceptable for development and testing
+
+## Required Packages
+
+Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install -y golang-go git iputils-ping ca-certificates
+```
+
+For systemd deployment:
+
+```bash
+sudo apt install -y systemd
+```
+
+Optional troubleshooting packages:
+
+```bash
+sudo apt install -y snmp mosquitto-clients sqlite3
+```
+
 ## Configuration
 
 ### agent.yml
@@ -58,6 +90,7 @@ agent:
 paths:
   devices_dir: devices.d
   thresholds_file: thresholds.yml
+  profiles_dir: profiles
   adapters_file: adapters.yml
   queue_db: data/queue/queue.db
 ```

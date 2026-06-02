@@ -59,6 +59,7 @@ type Paths struct {
 	ThresholdsFile string `yaml:"thresholds_file"`
 	AdaptersFile   string `yaml:"adapters_file"`
 	QueueDB        string `yaml:"queue_db"`
+	ProfilesDir    string `yaml:"profiles_dir"`
 }
 
 // Device is loaded from `devices.d/*.yml`.
@@ -97,8 +98,9 @@ type AdaptersSection struct {
 
 // Loaded is the fully materialized configuration used by the agent and CLI.
 type Loaded struct {
-	Root       Root
-	Devices    []Device
-	Thresholds ThresholdsConfig
-	Adapters   AdaptersConfig
+	Root        Root
+	Devices     []Device
+	Thresholds  ThresholdsConfig
+	Adapters    AdaptersConfig
+	ProfilesDir string
 }

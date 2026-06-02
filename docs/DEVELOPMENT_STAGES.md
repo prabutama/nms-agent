@@ -1307,3 +1307,29 @@ Notes:
 - configs/examples/ provides HQ and Branch site templates with agent.yml, adapters.yml, thresholds.yml, and device configs.
 - packaging/RELEASE.md provides build commands for Linux/Windows/ARM64 and deployment checklist.
 - Final validation passed: fmt, test, build, validate, and run with dummy collector.
+
+2026-06-02 10:00
+Task: Phase 12B proper fix for profiles path resolution
+Changed files:
+- internal/config/types.go
+- internal/config/loader.go
+- cmd/nms-agent/main.go
+- packaging/systemd/install.sh
+- packaging/systemd/agent.yml
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make vet
+- make build
+- go run ./cmd/nms-agentctl validate --config configs/agent.yml
+Status update:
+- Phase 12B: proper fix DONE
+Notes:
+- Added `profiles_dir` to `Paths` struct in config/types.go for explicit profile path configuration.
+- Updated config loader to resolve `profiles_dir` from config; falls back to `../profiles` relative to agent.yml when not set.
+- Updated main.go to use resolved `ProfilesDir` from config instead of hardcoded `../profiles` path.
+- Updated systemd installer to copy all profiles from `profiles/` directory to `/etc/nms-agent/profiles`.
+- Updated systemd agent.yml to include `profiles_dir: /etc/nms-agent/profiles`.
+- This fix resolves the `open /etc/profiles: no such file or directory` error during service startup.

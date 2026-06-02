@@ -43,6 +43,13 @@ install -m 0644 "${SCRIPT_DIR}/agent.yml" "${ETC_DIR}/agent.yml"
 install -m 0644 "${SCRIPT_DIR}/adapters.yml" "${ETC_DIR}/adapters.yml"
 install -m 0644 "${SCRIPT_DIR}/thresholds.yml" "${ETC_DIR}/thresholds.yml"
 
+# Install profiles directory.
+PROFILES_DIR="${ETC_DIR}/profiles"
+mkdir -p "${PROFILES_DIR}"
+for f in "${REPO_ROOT}/profiles/"*.yml; do
+  [ -f "$f" ] && install -m 0644 "$f" "${PROFILES_DIR}/"
+done
+
 # Install example device if none exist.
 if ! ls -1 "${ETC_DIR}/devices.d"/*.yml >/dev/null 2>&1; then
   install -m 0644 "${SCRIPT_DIR}/devices.d/example-linux-proxmox.yml" "${ETC_DIR}/devices.d/example-linux-proxmox.yml"

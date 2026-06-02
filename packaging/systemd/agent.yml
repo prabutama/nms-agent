@@ -16,4 +16,5 @@ paths:
   devices_dir: /etc/nms-agent/devices.d
   thresholds_file: /etc/nms-agent/thresholds.yml
   adapters_file: /etc/nms-agent/adapters.yml
+  profiles_dir: /etc/nms-agent/profiles
   queue_db: /var/lib/nms-agent/queue.db
