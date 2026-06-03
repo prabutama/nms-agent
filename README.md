@@ -40,6 +40,9 @@ sudo systemctl status nms-agent
 sudo systemctl reload nms-agent
 ```
 
+**Reinstall / Upgrade:**
+Config files (`agent.yml`, `adapters.yml`, `thresholds.yml`) are preserved. Updated sample configs are deployed as `*.dist` files for reference.
+
 ## System Requirements
 
 - Linux server recommended for production deployment

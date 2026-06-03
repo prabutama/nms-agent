@@ -39,9 +39,20 @@ mkdir -p "${OPT_DIR}" "${ETC_DIR}" "${ETC_DIR}/devices.d" "${LIB_DIR}" "${LOG_DI
 )
 
 install -m 0644 "${SCRIPT_DIR}/nms-agent.service" "${UNIT_PATH}"
-install -m 0644 "${SCRIPT_DIR}/agent.yml" "${ETC_DIR}/agent.yml"
-install -m 0644 "${SCRIPT_DIR}/adapters.yml" "${ETC_DIR}/adapters.yml"
-install -m 0644 "${SCRIPT_DIR}/thresholds.yml" "${ETC_DIR}/thresholds.yml"
+
+# Preserve existing config files; deploy sample as .dist.
+for f in agent.yml adapters.yml thresholds.yml; do
+  src="${SCRIPT_DIR}/${f}"
+  dst="${ETC_DIR}/${f}"
+  dist="${ETC_DIR}/${f}.dist"
+  if [[ ! -f "${dst}" ]]; then
+    install -m 0644 "${src}" "${dst}"
+    echo "installed: ${dst}"
+  else
+    echo "preserved existing: ${dst}"
+  fi
+  install -m 0644 "${src}" "${dist}"
+done
 
 # Install profiles directory.
 PROFILES_DIR="${ETC_DIR}/profiles"

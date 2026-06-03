@@ -1482,4 +1482,23 @@ Notes:
 - Config validation now rejects device id/address with hidden characters.
 - Tests added for sanitizeInput, validateDeviceID, validateAddress, validateVendorModel, and config validation with hidden chars.
 - All validation passed: fmt, test, build.
+
+2026-06-03 15:00
+Task: Preserve existing config files during reinstall
+Changed files:
+- packaging/systemd/install.sh
+- README.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 13B: Config preserve on reinstall DONE
+Notes:
+- install.sh now checks if config files exist before installing.
+- Existing agent.yml, adapters.yml, thresholds.yml are preserved.
+- Updated sample configs are deployed as *.dist files for reference.
+- README.md updated with reinstall/upgrade notes.
+- All validation passed: fmt, test, build.
 ```
