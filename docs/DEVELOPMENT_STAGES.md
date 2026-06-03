@@ -1501,4 +1501,23 @@ Notes:
 - Updated sample configs are deployed as *.dist files for reference.
 - README.md updated with reinstall/upgrade notes.
 - All validation passed: fmt, test, build.
+
+2026-06-03 16:00
+Task: Rewrite wizard input to use Scanner and validate per field
+Changed files:
+- cmd/nms-agentctl/device.go
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 13C: Wizard input rewrite DONE
+Notes:
+- Replaced bufio.NewReader.ReadString with bufio.Scanner for safer line reading.
+- Validation now runs immediately per field instead of before write.
+- Invalid input is rejected with clear error and prompt restart.
+- Added input stream end detection for graceful cancellation.
+- sanitizeInput kept for existing tests but no longer used in wizard path.
+- All validation passed: fmt, test, build.
 ```

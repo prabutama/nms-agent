@@ -333,17 +333,22 @@ func validateVendorModel(vendor, model string) error {
 }
 
 func runDeviceAddInteractive(configPath *string, id, address, vendor, model *string, snmpEnabled, icmpEnabled *bool) int {
-	reader := bufio.NewReader(os.Stdin)
+	scanner := bufio.NewScanner(os.Stdin)
 
 	prompt := func(label string) string {
 		for {
 			fmt.Fprintf(os.Stderr, "%s: ", label)
-			input, _ := reader.ReadString('\n')
-			input = sanitizeInput(input)
-			if input != "" {
-				return input
+			if !scanner.Scan() {
+				fmt.Fprintln(os.Stderr, "  input stream ended")
+				return ""
 			}
-			fmt.Fprintln(os.Stderr, "  cannot be empty, try again")
+			input := scanner.Text()
+			cleaned := strings.TrimSpace(input)
+			if cleaned == "" {
+				fmt.Fprintln(os.Stderr, "  cannot be empty, try again")
+				continue
+			}
+			return cleaned
 		}
 	}
 
@@ -354,8 +359,11 @@ func runDeviceAddInteractive(configPath *string, id, address, vendor, model *str
 		}
 		for {
 			fmt.Fprintf(os.Stderr, "%s [%s]: ", label, def)
-			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(strings.ToLower(input))
+			if !scanner.Scan() {
+				fmt.Fprintln(os.Stderr, "  input stream ended")
+				return defaultVal
+			}
+			input := strings.TrimSpace(strings.ToLower(scanner.Text()))
 			if input == "" {
 				return defaultVal
 			}
@@ -371,9 +379,37 @@ func runDeviceAddInteractive(configPath *string, id, address, vendor, model *str
 	}
 
 	*id = prompt("Device ID")
+	if *id == "" {
+		fmt.Fprintln(os.Stderr, "cancelled: input stream ended")
+		return 2
+	}
+	if err := validateDeviceID(*id); err != nil {
+		fmt.Fprintf(os.Stderr, "invalid device id: %v\n", err)
+		return 2
+	}
+
 	*address = prompt("Address / IP")
+	if *address == "" {
+		fmt.Fprintln(os.Stderr, "cancelled: input stream ended")
+		return 2
+	}
+	if err := validateAddress(*address); err != nil {
+		fmt.Fprintf(os.Stderr, "invalid address: %v\n", err)
+		return 2
+	}
+
 	*vendor = prompt("Vendor")
+	if *vendor == "" {
+		fmt.Fprintln(os.Stderr, "cancelled: input stream ended")
+		return 2
+	}
+
 	*model = prompt("Model")
+	if *model == "" {
+		fmt.Fprintln(os.Stderr, "cancelled: input stream ended")
+		return 2
+	}
+
 	*snmpEnabled = promptBool("Enable SNMP", true)
 	*icmpEnabled = promptBool("Enable ICMP", true)
 
@@ -388,20 +424,6 @@ func runDeviceAddInteractive(configPath *string, id, address, vendor, model *str
 
 	if !promptBool("Save device?", true) {
 		fmt.Fprintln(os.Stderr, "cancelled")
-		return 2
-	}
-
-	// Validate sanitized values before write.
-	if err := validateDeviceID(*id); err != nil {
-		fmt.Fprintf(os.Stderr, "invalid device id: %v\n", err)
-		return 2
-	}
-	if err := validateAddress(*address); err != nil {
-		fmt.Fprintf(os.Stderr, "invalid address: %v\n", err)
-		return 2
-	}
-	if err := validateVendorModel(*vendor, *model); err != nil {
-		fmt.Fprintf(os.Stderr, "invalid device metadata: %v\n", err)
 		return 2
 	}
 
