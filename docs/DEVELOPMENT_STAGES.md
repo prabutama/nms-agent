@@ -1520,4 +1520,22 @@ Notes:
 - Added input stream end detection for graceful cancellation.
 - sanitizeInput kept for existing tests but no longer used in wizard path.
 - All validation passed: fmt, test, build.
+
+2026-06-03 17:00
+Task: Add reprompt logic to wizard for typo tolerance
+Changed files:
+- cmd/nms-agentctl/device.go
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 13D: Wizard reprompt for typos DONE
+Notes:
+- Added promptValidated function that loops until valid input is provided.
+- Invalid input now shows error and re-prompts the same field instead of exiting.
+- Only EOF/input stream end triggers cancellation.
+- Added validateVendorForSingle and validateModelForSingle helpers.
+- All validation passed: fmt, test, build.
 ```

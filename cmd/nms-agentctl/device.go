@@ -332,23 +332,51 @@ func validateVendorModel(vendor, model string) error {
 	return nil
 }
 
+// validateVendorForSingle checks a single vendor string.
+func validateVendorForSingle(s string) error {
+	if s == "" {
+		return errors.New("vendor is required")
+	}
+	for _, r := range s {
+		if r < 32 || (r > 126 && r != '\t') {
+			return fmt.Errorf("vendor contains invalid character: %q", string(r))
+		}
+	}
+	return nil
+}
+
+// validateModelForSingle checks a single model string.
+func validateModelForSingle(s string) error {
+	if s == "" {
+		return errors.New("model is required")
+	}
+	for _, r := range s {
+		if r < 32 || (r > 126 && r != '\t') {
+			return fmt.Errorf("model contains invalid character: %q", string(r))
+		}
+	}
+	return nil
+}
+
 func runDeviceAddInteractive(configPath *string, id, address, vendor, model *string, snmpEnabled, icmpEnabled *bool) int {
 	scanner := bufio.NewScanner(os.Stdin)
 
-	prompt := func(label string) string {
+	promptValidated := func(label string, validator func(string) error) (string, error) {
 		for {
 			fmt.Fprintf(os.Stderr, "%s: ", label)
 			if !scanner.Scan() {
-				fmt.Fprintln(os.Stderr, "  input stream ended")
-				return ""
+				return "", fmt.Errorf("input stream ended")
 			}
-			input := scanner.Text()
-			cleaned := strings.TrimSpace(input)
-			if cleaned == "" {
+			input := strings.TrimSpace(scanner.Text())
+			if input == "" {
 				fmt.Fprintln(os.Stderr, "  cannot be empty, try again")
 				continue
 			}
-			return cleaned
+			if err := validator(input); err != nil {
+				fmt.Fprintf(os.Stderr, "  invalid: %v\n", err)
+				continue
+			}
+			return input, nil
 		}
 	}
 
@@ -378,35 +406,28 @@ func runDeviceAddInteractive(configPath *string, id, address, vendor, model *str
 		}
 	}
 
-	*id = prompt("Device ID")
-	if *id == "" {
-		fmt.Fprintln(os.Stderr, "cancelled: input stream ended")
-		return 2
-	}
-	if err := validateDeviceID(*id); err != nil {
-		fmt.Fprintf(os.Stderr, "invalid device id: %v\n", err)
+	var err error
+	*id, err = promptValidated("Device ID", validateDeviceID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cancelled: %v\n", err)
 		return 2
 	}
 
-	*address = prompt("Address / IP")
-	if *address == "" {
-		fmt.Fprintln(os.Stderr, "cancelled: input stream ended")
-		return 2
-	}
-	if err := validateAddress(*address); err != nil {
-		fmt.Fprintf(os.Stderr, "invalid address: %v\n", err)
+	*address, err = promptValidated("Address / IP", validateAddress)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cancelled: %v\n", err)
 		return 2
 	}
 
-	*vendor = prompt("Vendor")
-	if *vendor == "" {
-		fmt.Fprintln(os.Stderr, "cancelled: input stream ended")
+	*vendor, err = promptValidated("Vendor", validateVendorForSingle)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cancelled: %v\n", err)
 		return 2
 	}
 
-	*model = prompt("Model")
-	if *model == "" {
-		fmt.Fprintln(os.Stderr, "cancelled: input stream ended")
+	*model, err = promptValidated("Model", validateModelForSingle)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cancelled: %v\n", err)
 		return 2
 	}
 
