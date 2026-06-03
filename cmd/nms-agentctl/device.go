@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -253,6 +254,84 @@ func isInteractiveTerminal() bool {
 	return (stat.Mode() & os.ModeCharDevice) != 0
 }
 
+// sanitizeInput cleans raw reader input for safe use as device fields.
+func sanitizeInput(raw string) string {
+	s := strings.TrimSpace(raw)
+	s = strings.ReplaceAll(s, "\r", "")
+	var out strings.Builder
+	out.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 32 && r < 127:
+			out.WriteRune(r)
+		case r == '\t':
+			out.WriteString(" ")
+		}
+	}
+	return strings.TrimSpace(out.String())
+}
+
+// validateDeviceID checks that id is safe for filename and config use.
+func validateDeviceID(id string) error {
+	if id == "" {
+		return errors.New("device id is required")
+	}
+	for _, r := range id {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' && r != '.' {
+			return fmt.Errorf("device id contains invalid character: %q", string(r))
+		}
+	}
+	return nil
+}
+
+// validateAddress checks that address is a valid IP or hostname.
+func validateAddress(addr string) error {
+	if addr == "" {
+		return errors.New("address is required")
+	}
+	// Basic IP validation (IPv4/IPv6).
+	if net.ParseIP(addr) != nil {
+		return nil
+	}
+	// Basic hostname validation.
+	if len(addr) > 253 {
+		return errors.New("address hostname too long")
+	}
+	labels := strings.Split(addr, ".")
+	for _, l := range labels {
+		if len(l) == 0 || len(l) > 63 {
+			return fmt.Errorf("address hostname has invalid label: %q", l)
+		}
+		for _, r := range l {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' {
+				return fmt.Errorf("address hostname has invalid character: %q", string(r))
+			}
+		}
+	}
+	return nil
+}
+
+// validateVendorModel checks vendor and model fields.
+func validateVendorModel(vendor, model string) error {
+	if vendor == "" {
+		return errors.New("vendor is required")
+	}
+	if model == "" {
+		return errors.New("model is required")
+	}
+	for _, r := range vendor {
+		if r < 32 || (r > 126 && r != '\t') {
+			return fmt.Errorf("vendor contains invalid character: %q", string(r))
+		}
+	}
+	for _, r := range model {
+		if r < 32 || (r > 126 && r != '\t') {
+			return fmt.Errorf("model contains invalid character: %q", string(r))
+		}
+	}
+	return nil
+}
+
 func runDeviceAddInteractive(configPath *string, id, address, vendor, model *string, snmpEnabled, icmpEnabled *bool) int {
 	reader := bufio.NewReader(os.Stdin)
 
@@ -260,7 +339,7 @@ func runDeviceAddInteractive(configPath *string, id, address, vendor, model *str
 		for {
 			fmt.Fprintf(os.Stderr, "%s: ", label)
 			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(input)
+			input = sanitizeInput(input)
 			if input != "" {
 				return input
 			}
@@ -309,6 +388,20 @@ func runDeviceAddInteractive(configPath *string, id, address, vendor, model *str
 
 	if !promptBool("Save device?", true) {
 		fmt.Fprintln(os.Stderr, "cancelled")
+		return 2
+	}
+
+	// Validate sanitized values before write.
+	if err := validateDeviceID(*id); err != nil {
+		fmt.Fprintf(os.Stderr, "invalid device id: %v\n", err)
+		return 2
+	}
+	if err := validateAddress(*address); err != nil {
+		fmt.Fprintf(os.Stderr, "invalid address: %v\n", err)
+		return 2
+	}
+	if err := validateVendorModel(*vendor, *model); err != nil {
+		fmt.Fprintf(os.Stderr, "invalid device metadata: %v\n", err)
 		return 2
 	}
 

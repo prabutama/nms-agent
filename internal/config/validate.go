@@ -51,9 +51,24 @@ func Validate(cfg Loaded) error {
 			} else {
 				seenIDs[d.ID] = struct{}{}
 			}
+			// Reject device ids with hidden/control characters.
+			for _, r := range d.ID {
+				if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' && r != '.' {
+					errs = append(errs, prefix+".id contains invalid character: '"+string(r)+"'")
+					break
+				}
+			}
 		}
 		if strings.TrimSpace(d.Address) == "" {
 			errs = append(errs, prefix+".address is required")
+		} else {
+			// Reject addresses with hidden/control characters.
+			for _, r := range d.Address {
+				if r < 32 && r != '\t' || (r > 126 && r != '\t') {
+					errs = append(errs, prefix+".address contains invalid character: '"+string(r)+"'")
+					break
+				}
+			}
 		}
 		// Collector enable flags are optional; no strict validation yet.
 	}

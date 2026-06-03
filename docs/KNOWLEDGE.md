@@ -40,7 +40,7 @@
 | `cmd/nms-agentctl/queue_retry.go` | Implementasi `nms-agentctl queue retry` untuk mencoba mengirim batch pending dari SQLite queue lalu ack (delivered) atau increment retry (failed). |
 | `cmd/nms-agentctl/queue_retry_test.go` | Test CLI queue retry: seed SQLite queue lalu pastikan item pending terkirim dan terhapus.                                                |
 | `cmd/nms-agentctl/threshold.go` | Implementasi `nms-agentctl threshold list` dan `threshold set`. List baca thresholds.yml dan print rules. Set upsert by metric+tags match, tulis atomic ke YAML. |
-| `cmd/nms-agentctl/device.go`   | Implementasi `nms-agentctl device` subcommands: list/add/update/remove/test (validasi + atomic write/rollback untuk perubahan file di `devices.d`). |
+| `cmd/nms-agentctl/device.go`   | Implementasi `nms-agentctl device` subcommands: list/add/update/remove/test (validasi + atomic write/rollback, sanitasi input wizard, validasi id/address/vendor/model). |
 | `cmd/nms-agentctl/device_test.go` | Unit test device CLI: add/update/remove (write file baru, update field, hapus file) dan cek duplikasi id.                                       |
 | `internal/adapters/factory.go` | Factory adapter berdasarkan nama (`tui`/`generic_mqtt`/`thingsboard_mqtt`), dipanggil dari `cmd/nms-agent/main.go` gantikan hardcoded `NewTerminalAdapter()`. |
 | `internal/adapters/factory_test.go` | Unit test factory adapter: pastikan adapter yang didukung bisa dibuat (TUI headless) dan unknown name mengembalikan error.                     |

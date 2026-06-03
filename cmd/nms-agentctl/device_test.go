@@ -109,3 +109,70 @@ func TestDeviceRemove_DeletesFile(t *testing.T) {
 		t.Fatalf("expected file removed")
 	}
 }
+
+func TestSanitizeInput_CleansHiddenChars(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{"trailing CR", "172.16.30.1\r", "172.16.30.1"},
+		{"leading space", "  172.16.30.1  ", "172.16.30.1"},
+		{"tab in middle", "172.16\t30.1", "172.16 30.1"},
+		{"control char", "172.16\x01.1", "172.16.1"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeInput(tt.input)
+			if got != tt.expect {
+				t.Fatalf("sanitizeInput(%q) = %q, want %q", tt.input, got, tt.expect)
+			}
+		})
+	}
+}
+
+func TestValidateDeviceID(t *testing.T) {
+	if err := validateDeviceID("valid-id"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := validateDeviceID(""); err == nil {
+		t.Fatal("expected error for empty id")
+	}
+	if err := validateDeviceID("bad id"); err == nil {
+		t.Fatal("expected error for id with space")
+	}
+	if err := validateDeviceID("bad@id"); err == nil {
+		t.Fatal("expected error for id with special char")
+	}
+}
+
+func TestValidateAddress(t *testing.T) {
+	if err := validateAddress("127.0.0.1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := validateAddress("localhost"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := validateAddress(""); err == nil {
+		t.Fatal("expected error for empty address")
+	}
+	if err := validateAddress("bad\x01address"); err == nil {
+		t.Fatal("expected error for address with control char")
+	}
+}
+
+func TestValidateVendorModel(t *testing.T) {
+	if err := validateVendorModel("linux", "ubuntu"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := validateVendorModel("", "ubuntu"); err == nil {
+		t.Fatal("expected error for empty vendor")
+	}
+	if err := validateVendorModel("linux", ""); err == nil {
+		t.Fatal("expected error for empty model")
+	}
+	if err := validateVendorModel("linux\x01", "ubuntu"); err == nil {
+		t.Fatal("expected error for vendor with control char")
+	}
+}

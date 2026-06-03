@@ -1458,4 +1458,28 @@ Notes:
 - summary mode shows device counts and last update timestamp.
 - raw mode shows full telemetry snapshot and live stream.
 - All tests pass and build succeeds.
+
+2026-06-03 14:00
+Task: Harden wizard input for device add
+Changed files:
+- cmd/nms-agentctl/device.go
+- internal/config/validate.go
+- internal/config/validate_test.go
+- cmd/nms-agentctl/device_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 13A: Wizard input hardening DONE
+Notes:
+- Added sanitizeInput helper to strip control chars, \r, ANSI escapes from interactive input.
+- Added validateDeviceID: rejects non-safe characters (only alnum + -_. allowed).
+- Added validateAddress: validates IP or hostname, rejects control chars.
+- Added validateVendorModel: rejects control chars in vendor/model.
+- Config validation now rejects device id/address with hidden characters.
+- Tests added for sanitizeInput, validateDeviceID, validateAddress, validateVendorModel, and config validation with hidden chars.
+- All validation passed: fmt, test, build.
 ```
