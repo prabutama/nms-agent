@@ -20,6 +20,10 @@ func runThreshold(args []string) int {
 		thresholdUsage()
 		return 2
 	}
+	if isHelpArg(args[0]) {
+		thresholdUsage()
+		return 0
+	}
 	switch args[0] {
 	case "list":
 		return runThresholdList(args[1:])

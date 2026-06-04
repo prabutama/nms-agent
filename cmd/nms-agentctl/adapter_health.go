@@ -13,16 +13,28 @@ import (
 
 func runAdapter(args []string) int {
 	if len(args) < 1 {
-		usage()
+		adapterUsage()
 		return 2
+	}
+	if isHelpArg(args[0]) {
+		adapterUsage()
+		return 0
 	}
 	switch args[0] {
 	case "health":
 		return runAdapterHealth(args[1:])
 	default:
-		usage()
+		adapterUsage()
 		return 2
 	}
+}
+
+func adapterUsage() {
+	fmt.Fprintln(os.Stderr, "Usage:")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl adapter health")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Config default: /etc/nms-agent/agent.yml")
+	fmt.Fprintln(os.Stderr, "Override with: --config <path>")
 }
 
 func runAdapterHealth(args []string) int {

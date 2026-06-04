@@ -23,8 +23,12 @@ var newDiscoveryService = func() discovery.Service {
 
 func runDiscovery(args []string) int {
 	if len(args) < 1 {
-		usage()
+		discoveryUsage()
 		return 2
+	}
+	if isHelpArg(args[0]) {
+		discoveryUsage()
+		return 0
 	}
 	switch args[0] {
 	case "run":
@@ -34,9 +38,19 @@ func runDiscovery(args []string) int {
 	case "status":
 		return runDiscoveryStatus(args[1:])
 	default:
-		usage()
+		discoveryUsage()
 		return 2
 	}
+}
+
+func discoveryUsage() {
+	fmt.Fprintln(os.Stderr, "Usage:")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery status")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery preview")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery run")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Config default: /etc/nms-agent/agent.yml")
+	fmt.Fprintln(os.Stderr, "Override with: --config <path>")
 }
 
 func runDiscoveryRun(args []string) int {

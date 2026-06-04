@@ -22,8 +22,12 @@ import (
 
 func runDevice(args []string) int {
 	if len(args) < 1 {
-		usage()
+		deviceUsage()
 		return 2
+	}
+	if isHelpArg(args[0]) {
+		deviceUsage()
+		return 0
 	}
 	switch args[0] {
 	case "list":
@@ -37,9 +41,21 @@ func runDevice(args []string) int {
 	case "test":
 		return runDeviceTest(args[1:])
 	default:
-		usage()
+		deviceUsage()
 		return 2
 	}
+}
+
+func deviceUsage() {
+	fmt.Fprintln(os.Stderr, "Usage:")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device list")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device add --id <id> --address <host> --vendor <v> --model <m> [--snmp=true] [--icmp=true]")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device update --id <id> [--address <host>] [--vendor <v>] [--model <m>] [--snmp=true|false] [--icmp=true|false]")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device remove --id <id>")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl device test --id <id> [--snmp=true|false] [--icmp=true|false]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Config default: /etc/nms-agent/agent.yml")
+	fmt.Fprintln(os.Stderr, "Override with: --config <path>")
 }
 
 type triBool struct {

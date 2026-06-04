@@ -11,6 +11,12 @@ func main() {
 		os.Exit(2)
 	}
 
+	// Global help support
+	if isHelpArg(os.Args[1]) {
+		usage()
+		os.Exit(0)
+	}
+
 	switch os.Args[1] {
 	case "validate":
 		os.Exit(runValidate(os.Args[2:]))
@@ -34,8 +40,43 @@ func main() {
 	}
 }
 
+func isHelpArg(arg string) bool {
+	return arg == "--help" || arg == "-h" || arg == "help"
+}
+
+func runQueue(args []string) int {
+	if len(args) < 1 {
+		queueUsage()
+		return 2
+	}
+	if isHelpArg(args[0]) {
+		queueUsage()
+		return 0
+	}
+	switch args[0] {
+	case "status":
+		return runQueueStatus(args[1:])
+	case "retry":
+		return runQueueRetry(args[1:])
+	default:
+		queueUsage()
+		return 2
+	}
+}
+
+func queueUsage() {
+	fmt.Fprintln(os.Stderr, "Usage:")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl queue status")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl queue retry [--limit 100]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Config default: /etc/nms-agent/agent.yml")
+	fmt.Fprintln(os.Stderr, "Override with: --config <path>")
+}
+
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl --help")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl help")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl validate")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl reload --pid <pid>")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl device list")
@@ -51,23 +92,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery status")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery preview")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery run")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl view")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Config default: /etc/nms-agent/agent.yml")
 	fmt.Fprintln(os.Stderr, "Override with: --config <path>")
-}
-
-func runQueue(args []string) int {
-	if len(args) < 1 {
-		usage()
-		return 2
-	}
-	switch args[0] {
-	case "status":
-		return runQueueStatus(args[1:])
-	case "retry":
-		return runQueueRetry(args[1:])
-	default:
-		usage()
-		return 2
-	}
 }
