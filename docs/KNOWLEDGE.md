@@ -58,6 +58,7 @@
 | `internal/discovery/types.go` | Tipe inti discovery Milestone A: candidate, fingerprint, result, provider, dan prober untuk auto-discovery pasif.                              |
 | `internal/discovery/service.go` | Orchestrator discovery sekali jalan: ambil kandidat dari provider, probe SNMP, resolve profile, dan auto-promote device baru.                              |
 | `internal/discovery/snmp_probe.go` | Probe SNMP ringan untuk fingerprint discovery (`sysObjectID`, `sysName`, `sysDescr`) dengan config community/timeout/retries.                              |
+| `internal/discovery/snmp_probe_test.go` | Unit test parser `sysObjectID` discovery untuk ObjectIdentifier/OID normalization (`iso.` dan leading dot).                              |
 | `internal/discovery/resolver.go` | Resolver fingerprint -> vendor/model berbasis `sysObjectID` dan heuristic `sysDescr` untuk profile matching discovery.                              |
 | `internal/discovery/promote.go` | Renderer `device_id_template`, collision suffix, dan atomic writer untuk auto-promote device hasil discovery ke `devices.d`.                              |
 | `internal/discovery/service_test.go` | Unit test discovery service: promote known profile, collision suffix, promotion limit, dan skip unknown-standard-only profile.                              |

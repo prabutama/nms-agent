@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -63,7 +64,7 @@ func (p SNMPProber) Probe(ctx context.Context, candidate Candidate, cfg config.D
 	for _, v := range pkt.Variables {
 		switch v.Name {
 		case oidSysObjectID:
-			if s, ok := pduToString(v); ok {
+			if s, ok := pduToOIDString(v); ok {
 				fp.SysObjectID = s
 			}
 		case oidSysName:
@@ -96,4 +97,27 @@ func pduToString(pdu g.SnmpPDU) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func pduToOIDString(pdu g.SnmpPDU) (string, bool) {
+	if s, ok := pduToString(pdu); ok {
+		return normalizeOIDString(s), s != ""
+	}
+	if pdu.Type == g.ObjectIdentifier {
+		s := strings.TrimSpace(fmt.Sprint(pdu.Value))
+		if s == "" || s == "<nil>" {
+			return "", false
+		}
+		return normalizeOIDString(s), true
+	}
+	return "", false
+}
+
+func normalizeOIDString(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, ".")
+	if strings.HasPrefix(strings.ToLower(s), "iso.") {
+		s = "1." + s[len("iso."):]
+	}
+	return s
 }

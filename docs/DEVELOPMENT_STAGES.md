@@ -1627,4 +1627,20 @@ Notes:
 - Discovery result reporting now includes generated profile count.
 - Added CLI tests for preview, run, and status flows.
 - All validation passed: fmt, test, build.
+
+2026-06-03 21:00
+Task: Fix discovery sysObjectID parsing for SNMP ObjectIdentifier
+Changed files:
+- internal/discovery/snmp_probe.go
+- internal/discovery/snmp_probe_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./...
+Status update:
+- Phase 14D: sysObjectID parsing fix DONE
+Notes:
+- Discovery probe now parses `sysObjectID` from SNMP `ObjectIdentifier` values, not only string/byte values.
+- Added normalization for `iso.` prefix and leading-dot OID forms so resolver sees numeric dotted OIDs.
+- Added regression tests for MikroTik-like `sysObjectID` representation.
 ```
