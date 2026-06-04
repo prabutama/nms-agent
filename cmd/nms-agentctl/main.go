@@ -26,6 +26,8 @@ func main() {
 		os.Exit(runAdapter(os.Args[2:]))
 	case "view":
 		os.Exit(runView(os.Args[2:]))
+	case "discovery":
+		os.Exit(runDiscovery(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
@@ -46,6 +48,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  nms-agentctl adapter health")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold list")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl threshold set --metric <name> --operator <op> [--warning <val>] [--critical <val>] [--tags k=v,k2=v2]")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery status")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery preview")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery run")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Config default: /etc/nms-agent/agent.yml")
 	fmt.Fprintln(os.Stderr, "Override with: --config <path>")

@@ -3,7 +3,7 @@
 | File                           | Peran                                                                                                                                              |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `go.mod`                       | Identitas modul Go. File ini menyimpan nama module, versi Go, dan dependency yang digunakan.                                                       |
-| `cmd/nms-agent/main.go`        | Entrypoint agent service. Memilih collector runtime via `--collector-mode`, adapter via factory (`tui`/`generic_mqtt`/`thingsboard_mqtt`), menjalankan pipeline periodik, dan hot reload config via SIGHUP. |
+| `cmd/nms-agent/main.go`        | Entrypoint agent service. Memilih collector runtime via `--collector-mode`, adapter via factory (`tui`/`generic_mqtt`/`thingsboard_mqtt`), menjalankan pipeline periodik, hot reload config, dan discovery loop pasif berbasis netlink. |
 | `cmd/nms-agent/reload_signal_unix.go` | Platform helper (non-Windows): definisikan signal reload (SIGHUP).                                                                      |
 | `cmd/nms-agent/reload_signal_windows.go` | Platform helper (Windows): disable reload signal handling.                                                                            |
 | `cmd/nms-agentctl/main.go`     | Entrypoint CLI admin. Menyediakan validate, reload, device management, queue, threshold, dan adapter health check. Default config: `/etc/nms-agent/agent.yml`. |
@@ -25,9 +25,9 @@
 | `internal/processors/passthrough_processor.go` | Processor Phase 3 (passthrough). Memetakan RawSample dummy menjadi canonical telemetry sederhana.                               |
 | `internal/processors/preprocess_threshold_processor.go` | Processor Phase 7: preprocessing + threshold + derived throughput + multi-signal physical interface classifier (ifName, ifConnectorPresent, ifType) + normalizeMetrics (pct clamp, ms/seconds/bps≥0, reachable 0/1, unit default). |
 | `internal/processors/preprocess_threshold_processor_test.go` | Unit test processor: threshold, derived metrics, multi-signal physical classifier (Proxmox/Docker/K8s patterns, connector present, wifi). |
-| `internal/config/types.go`     | Definisi struct config (root agent.yml, device entry, placeholders thresholds/adapters) + `ResolvePath()` untuk relative path + env expansion, `Delivery.WithDefaults()`. |
-| `internal/config/loader.go`    | Loader konfigurasi YAML. Membaca `agent.yml`, memuat `devices.d/*.yml`, thresholds, adapters, dan resolve path dengan `filepath`.                   |
-| `internal/config/validate.go`  | Validasi dasar konfigurasi (field wajib, duplikasi device id, sanity-check YAML) + `ValidateThresholdRules()` untuk isolated rule validation.    |
+| `internal/config/types.go`     | Definisi struct config (root agent.yml, device entry, thresholds/adapters, discovery) + `ResolvePath()` untuk relative path + env expansion, `Delivery.WithDefaults()`. |
+| `internal/config/loader.go`    | Loader konfigurasi YAML. Membaca `agent.yml`, memuat `devices.d/*.yml`, thresholds, adapters, discovery settings, dan resolve path dengan `filepath`.                   |
+| `internal/config/validate.go`  | Validasi dasar konfigurasi (field wajib, duplikasi device id, sanity-check YAML), termasuk blok discovery, + `ValidateThresholdRules()` untuk isolated rule validation.    |
 | `internal/config/timezone.go`  | Parser timezone config (`agent.output.timezone`) untuk presentation-only output (IANA atau fixed offset `UTC+7`).                                   |
 | `internal/config/loader_test.go` | Unit test loader: path relatif + load devices directory.                                                                                        |
 | `internal/config/validate_test.go` | Unit test validator: field wajib + duplikasi device id.                                                                                        |
@@ -55,6 +55,16 @@
 | `internal/adapters/tui_format.go` | Helper format untuk throughput (bps -> K/M/Gbps) dan memory (KB -> Ki/Mi/Gi seperti `free -h`).                                                 |
 | `internal/adapters/tui_adapter_test.go` | Smoke test TUI adapter (headless): SendBatch berbagai metric, multiple batch, close tanpa send.                                         |
 | `internal/adapters/tui_state.go` | State shared antara TUI adapter dan CLI summary: reducer ApplyBatch, helper DeviceCounts/AlertCounts/SortedDevices/dll.                              |
+| `internal/discovery/types.go` | Tipe inti discovery Milestone A: candidate, fingerprint, result, provider, dan prober untuk auto-discovery pasif.                              |
+| `internal/discovery/service.go` | Orchestrator discovery sekali jalan: ambil kandidat dari provider, probe SNMP, resolve profile, dan auto-promote device baru.                              |
+| `internal/discovery/snmp_probe.go` | Probe SNMP ringan untuk fingerprint discovery (`sysObjectID`, `sysName`, `sysDescr`) dengan config community/timeout/retries.                              |
+| `internal/discovery/resolver.go` | Resolver fingerprint -> vendor/model berbasis `sysObjectID` dan heuristic `sysDescr` untuk profile matching discovery.                              |
+| `internal/discovery/promote.go` | Renderer `device_id_template`, collision suffix, dan atomic writer untuk auto-promote device hasil discovery ke `devices.d`.                              |
+| `internal/discovery/service_test.go` | Unit test discovery service: promote known profile, collision suffix, promotion limit, dan skip unknown-standard-only profile.                              |
+| `internal/discovery/explorer/explorer.go` | Safe exploration Milestone B: probe katalog OID aman, generate profile YAML, dan simpan ke `profiles/` untuk auto-approve/auto-promote.                              |
+| `internal/discovery/explorer/explorer_test.go` | Unit test helper exploration: generated match fallback dan write generated profile file.                              |
+| `internal/discovery/providers/netlink/provider_linux.go` | Provider discovery Linux: baca interface + ARP/neighbor table via netlink lalu filter kandidat dalam subnet target.                              |
+| `internal/discovery/providers/netlink/provider_stub.go` | Stub provider non-Linux agar build lintas platform tetap aman saat discovery provider `netlink` tidak tersedia.                              |
 | `internal/adapters/mqtt_generic_adapter_test.go` | Unit test generic MQTT adapter: validasi config + publish sukses/gagal/timeout tanpa broker real (fake client/token).                     |
 | `internal/adapters/thingsboard_mqtt_adapter_test.go` | Unit test ThingsBoard MQTT adapter: validasi config + payload shape + publish error/strict mode tanpa broker real.                      |
 | `go.sum`                       | Lockfile dependency Go modules hasil `go mod tidy`.                                                                                                |
@@ -64,7 +74,7 @@
 | `docs/FLOW.md`                 | Diagram arsitektur dan alur runtime agent (CLI, config load/validate, pipeline, SQLite queue, adapter send, retry).                                |
 | `docs/CLI_COMMANDS.md`         | Contoh command CLI `nms-agentctl` untuk validate, device list, queue status/retry, adapter health, threshold list/set.                            |
 | `docs/DATA_CONTRACT.md`        | Kontrak canonical telemetry (field wajib, tags threshold, derived metrics, normalization, termasuk hrStorage dan optional UCD memory/swap breakdown). |
-| `docs/CONFIG_SCHEMA.md`        | Dokumentasi schema config YAML (agent.yml/adapters.yml/devices/thresholds) dan opsi adapter (terminal/tui/generic_mqtt/thingsboard_mqtt).           |
+| `docs/CONFIG_SCHEMA.md`        | Dokumentasi schema config YAML (agent.yml/adapters.yml/devices/thresholds/discovery) dan opsi adapter/discovery.           |
 | `docs/ADAPTER_CONTRACT.md`     | Kontrak adapter: aturan boundary adapter terhadap queue dan canonical telemetry, daftar adapter MVP.                                                |
 | `docs/DEVELOPMENT_STAGES.md`   | Checklist phase/stage pengembangan + development log + catatan validasi per task.                                                                  |
 | `packaging/systemd/nms-agent.service` | Unit file systemd untuk menjalankan `nms-agent` sebagai service, termasuk `ExecReload` (SIGHUP).                                               |
@@ -76,6 +86,7 @@
 | `packaging/systemd/devices.d/example-linux-proxmox.yml` | Sample device entry untuk deployment (Linux/Proxmox).                                                                                  |
 | `cmd/nms-agentctl/adapter_health.go` | Implementasi `nms-agentctl adapter health` untuk cek konektivitas adapter aktif (MQTT connect) tanpa mengirim telemetry.                      |
 | `cmd/nms-agentctl/adapter_health_test.go` | Unit test `adapter health`: terminal ok, unknown adapter fail (menggunakan config temp).                                                     |
+| `cmd/nms-agentctl/discover.go` | CLI discovery manual: `status`, `preview`, dan `run` untuk observability/eksekusi discovery di luar loop daemon.                                                     |
 | `cmd/nms-agentctl/view.go`                 | Implementasi `nms-agentctl view` untuk connect ke daemon via Unix socket, menampilkan snapshot + live update telemetry dengan adapter-specific rendering dan timezone dari config.                      |
 | `cmd/nms-agentctl/device.go`                 | CLI device management dengan wizard interaktif otomatis saat flag tidak lengkap (deteksi TTY).                                             |
 | `internal/viewer/message.go`                 | Tipe pesan JSON untuk viewer client (`snapshot` / `telemetry` / `status` dengan status + details).                                                                             |

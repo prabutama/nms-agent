@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +38,45 @@ func Validate(cfg Loaded) error {
 	}
 	if strings.TrimSpace(cfg.Root.Paths.QueueDB) == "" {
 		errs = append(errs, "paths.queue_db is required")
+	}
+
+	if cfg.Root.Discovery.Enabled {
+		d := cfg.Root.Discovery
+		if d.Interval <= 0 {
+			errs = append(errs, "discovery.interval must be > 0")
+		}
+		if strings.TrimSpace(d.Interface) == "" {
+			errs = append(errs, "discovery.interface is required")
+		}
+		if strings.TrimSpace(d.Subnet) == "" {
+			errs = append(errs, "discovery.subnet is required")
+		} else if _, _, err := net.ParseCIDR(d.Subnet); err != nil {
+			errs = append(errs, "discovery.subnet must be valid CIDR")
+		}
+		if strings.TrimSpace(d.Provider) != "netlink" {
+			errs = append(errs, "discovery.provider must be 'netlink'")
+		}
+		if strings.TrimSpace(d.SNMP.Version) != "v2c" {
+			errs = append(errs, "discovery.snmp.version must be 'v2c'")
+		}
+		if strings.TrimSpace(os.ExpandEnv(d.SNMP.Community)) == "" {
+			errs = append(errs, "discovery.snmp.community is required")
+		}
+		if d.SNMP.Timeout <= 0 {
+			errs = append(errs, "discovery.snmp.timeout must be > 0")
+		}
+		if d.SNMP.Concurrency <= 0 {
+			errs = append(errs, "discovery.snmp.concurrency must be > 0")
+		}
+		if d.AutoPromote.MaxNewDevicesPerCycle < 0 {
+			errs = append(errs, "discovery.auto_promote.max_new_devices_per_cycle must be >= 0")
+		}
+		if strings.TrimSpace(d.AutoPromote.WriteTo) == "" {
+			errs = append(errs, "discovery.auto_promote.write_to is required")
+		}
+		if d.Exploration.Enabled && strings.TrimSpace(d.Exploration.RunWhen) != "no_profile_match" {
+			errs = append(errs, "discovery.exploration.run_when must be 'no_profile_match'")
+		}
 	}
 
 	// Devices.

@@ -31,6 +31,39 @@ paths:
   thresholds_file: thresholds.yml
   adapters_file: adapters.yml
   queue_db: data/queue/queue.db
+
+discovery:
+  enabled: false
+  interval: 10m
+  interface: eth0
+  subnet: 192.168.10.0/24
+  provider: netlink
+
+  snmp:
+    version: v2c
+    community: ${SNMP_COMMUNITY}
+    timeout: 2s
+    retries: 1
+    concurrency: 32
+
+  auto_promote:
+    enabled: true
+    require_snmp_ok: true
+    require_sys_object_id: true
+    require_profile_match: true
+    max_new_devices_per_cycle: 10
+    device_id_template: "{{vendor}}-{{sys_name}}"
+    write_to: devices.d
+
+  exploration:
+    enabled: true
+    run_when: no_profile_match
+    safe_only: true
+    auto_approve_generated_profile: true
+    auto_promote_after_generate: true
+    max_oids_per_device: 300
+    timeout: 3s
+    output_dir: profiles
 ```
 
 Notes:
@@ -45,6 +78,12 @@ Notes:
 - `paths.*` may be relative to the directory containing `agent.yml`.
 - `${ENV_VAR}` expansion is supported for path strings via the current process environment.
 - `paths.queue_db` is the SQLite DB file path for the local durable queue. Its parent directory is created at runtime if missing.
+- `discovery.*` is optional. Milestone A currently implements passive candidate discovery from Linux netlink/ARP neighbor table only.
+- `discovery.interface` is the local network interface name on the gateway host (for example `eth0`, `ens18`, `br-lan`).
+- `discovery.subnet` filters candidates to a single target CIDR.
+- `discovery.provider` currently supports only `netlink`.
+- `discovery.snmp.community` supports `${ENV_VAR}` expansion through the current process environment.
+- `discovery.exploration.*` is active in Milestone B using a static safe OID catalog (system, interfaces, host-resources). It is not a full arbitrary-tree SNMP walk.
 
 ## configs/devices.d/*.yml
 

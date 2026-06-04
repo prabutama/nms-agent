@@ -11,8 +11,9 @@ import (
 
 // Root is loaded from `agent.yml` and references other config files.
 type Root struct {
-	Agent Agent `yaml:"agent"`
-	Paths Paths `yaml:"paths"`
+	Agent     Agent     `yaml:"agent"`
+	Paths     Paths     `yaml:"paths"`
+	Discovery Discovery `yaml:"discovery"`
 }
 
 type Agent struct {
@@ -60,6 +61,46 @@ type Paths struct {
 	AdaptersFile   string `yaml:"adapters_file"`
 	QueueDB        string `yaml:"queue_db"`
 	ProfilesDir    string `yaml:"profiles_dir"`
+}
+
+type Discovery struct {
+	Enabled     bool                 `yaml:"enabled"`
+	Interval    time.Duration        `yaml:"interval"`
+	Interface   string               `yaml:"interface"`
+	Subnet      string               `yaml:"subnet"`
+	Provider    string               `yaml:"provider"`
+	SNMP        DiscoverySNMP        `yaml:"snmp"`
+	AutoPromote DiscoveryAutoPromote `yaml:"auto_promote"`
+	Exploration DiscoveryExploration `yaml:"exploration"`
+}
+
+type DiscoverySNMP struct {
+	Version     string        `yaml:"version"`
+	Community   string        `yaml:"community"`
+	Timeout     time.Duration `yaml:"timeout"`
+	Retries     int           `yaml:"retries"`
+	Concurrency int           `yaml:"concurrency"`
+}
+
+type DiscoveryAutoPromote struct {
+	Enabled               bool   `yaml:"enabled"`
+	RequireSNMPOK         bool   `yaml:"require_snmp_ok"`
+	RequireSysObjectID    bool   `yaml:"require_sys_object_id"`
+	RequireProfileMatch   bool   `yaml:"require_profile_match"`
+	MaxNewDevicesPerCycle int    `yaml:"max_new_devices_per_cycle"`
+	DeviceIDTemplate      string `yaml:"device_id_template"`
+	WriteTo               string `yaml:"write_to"`
+}
+
+type DiscoveryExploration struct {
+	Enabled                     bool          `yaml:"enabled"`
+	RunWhen                     string        `yaml:"run_when"`
+	SafeOnly                    bool          `yaml:"safe_only"`
+	AutoApproveGeneratedProfile bool          `yaml:"auto_approve_generated_profile"`
+	AutoPromoteAfterGenerate    bool          `yaml:"auto_promote_after_generate"`
+	MaxOIDsPerDevice            int           `yaml:"max_oids_per_device"`
+	Timeout                     time.Duration `yaml:"timeout"`
+	OutputDir                   string        `yaml:"output_dir"`
 }
 
 // Device is loaded from `devices.d/*.yml`.

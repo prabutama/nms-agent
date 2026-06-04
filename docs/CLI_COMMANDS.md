@@ -40,6 +40,17 @@ nms-agentctl queue retry --config configs/agent.yml --limit 100
 ## Adapter Commands
 nms-agentctl adapter health --config configs/agent.yml
 
+## Discovery Commands
+
+### Show discovery config status
+nms-agentctl discovery status --config configs/agent.yml
+
+### Preview discovery result without writing devices/profiles
+nms-agentctl discovery preview --config configs/agent.yml
+
+### Run one discovery cycle immediately
+nms-agentctl discovery run --config configs/agent.yml
+
 ## Threshold Commands
 
 ### List all threshold rules

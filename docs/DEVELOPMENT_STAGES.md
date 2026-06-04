@@ -1538,4 +1538,93 @@ Notes:
 - Only EOF/input stream end triggers cancellation.
 - Added validateVendorForSingle and validateModelForSingle helpers.
 - All validation passed: fmt, test, build.
+
+2026-06-03 18:00
+Task: Milestone A passive discovery via netlink + SNMP fingerprint + auto-promote
+Changed files:
+- go.mod
+- go.sum
+- cmd/nms-agent/main.go
+- internal/config/types.go
+- internal/config/loader.go
+- internal/config/validate.go
+- internal/config/validate_test.go
+- internal/discovery/types.go
+- internal/discovery/service.go
+- internal/discovery/service_test.go
+- internal/discovery/snmp_probe.go
+- internal/discovery/resolver.go
+- internal/discovery/promote.go
+- internal/discovery/providers/netlink/provider_linux.go
+- internal/discovery/providers/netlink/provider_stub.go
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./...
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 14A: Passive discovery milestone A DONE
+Notes:
+- Added `discovery` config schema and validation (interface/subnet/provider/snmp/auto_promote/exploration).
+- Added passive Linux netlink neighbor-table provider with non-Linux stub.
+- Added discovery service to filter existing inventory, probe SNMP fingerprint, resolve vendor/model, and auto-promote devices with known profile match.
+- Discovery auto-promote always writes `snmp.enabled: true` and `icmp.enabled: true` with collision-safe device IDs.
+- Integrated discovery loop into agent runtime with internal config reload when new devices are written.
+- Exploration config is parsed/validated; Milestone A stops at known-profile auto-promote.
+- All validation passed: fmt, test, build.
+
+2026-06-03 19:00
+Task: Milestone B safe exploration + generated profile auto-promote
+Changed files:
+- cmd/nms-agent/main.go
+- internal/discovery/types.go
+- internal/discovery/service.go
+- internal/discovery/service_test.go
+- internal/discovery/explorer/explorer.go
+- internal/discovery/explorer/explorer_test.go
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./...
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 14B: Safe exploration milestone B DONE
+Notes:
+- Added safe exploration fallback for `run_when: no_profile_match` using a static allowlist of read-only OIDs.
+- Generated profiles are validated, written to `profiles/`, then reloaded in-memory so discovery can auto-promote in the same cycle.
+- Generated match fallback uses resolver output if available, otherwise `vendor=discovered` and `model=sysobj-...` from `sysObjectID`.
+- Added tests for generated profile writer and service flow `no_profile_match -> generated profile -> promote`.
+- All validation passed: fmt, test, build.
+
+2026-06-03 20:00
+Task: Discovery CLI and observability completion
+Changed files:
+- cmd/nms-agentctl/main.go
+- cmd/nms-agentctl/discover.go
+- cmd/nms-agentctl/discover_test.go
+- internal/discovery/types.go
+- internal/discovery/service.go
+- docs/KNOWLEDGE.md
+- docs/CLI_COMMANDS.md
+- README.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./...
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 14C: Discovery CLI/observability DONE
+Notes:
+- Added `nms-agentctl discovery status|preview|run` commands.
+- `preview` runs discovery in dry-run mode without writing device/profile files.
+- Discovery result reporting now includes generated profile count.
+- Added CLI tests for preview, run, and status flows.
+- All validation passed: fmt, test, build.
 ```

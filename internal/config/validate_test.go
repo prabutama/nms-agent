@@ -60,3 +60,80 @@ func TestValidate_DeviceAddressWithHiddenChars(t *testing.T) {
 		t.Fatalf("expected error for address with hidden char")
 	}
 }
+
+func TestValidate_DiscoveryEnabledValid(t *testing.T) {
+	community := "public"
+	t.Setenv("SNMP_COMMUNITY", community)
+	cfg := Loaded{
+		Root: Root{
+			Agent: Agent{PollInterval: time.Second},
+			Paths: Paths{DevicesDir: "x", ThresholdsFile: "y", AdaptersFile: "z", QueueDB: "q.db"},
+			Discovery: Discovery{
+				Enabled:   true,
+				Interval:  10 * time.Minute,
+				Interface: "eth0",
+				Subnet:    "192.168.10.0/24",
+				Provider:  "netlink",
+				SNMP: DiscoverySNMP{
+					Version:     "v2c",
+					Community:   "${SNMP_COMMUNITY}",
+					Timeout:     2 * time.Second,
+					Retries:     1,
+					Concurrency: 32,
+				},
+				AutoPromote: DiscoveryAutoPromote{
+					Enabled:               true,
+					MaxNewDevicesPerCycle: 10,
+					DeviceIDTemplate:      "{{vendor}}-{{sys_name}}",
+					WriteTo:               "devices.d",
+				},
+				Exploration: DiscoveryExploration{
+					Enabled:   true,
+					RunWhen:   "no_profile_match",
+					Timeout:   3 * time.Second,
+					OutputDir: "profiles",
+				},
+			},
+		},
+		Devices:  []Device{{ID: "d1", Address: "127.0.0.1"}},
+		Adapters: AdaptersConfig{Adapters: AdaptersSection{Active: "tui", Configs: map[string]any{}}},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+}
+
+func TestValidate_DiscoveryEnabledInvalid(t *testing.T) {
+	cfg := Loaded{
+		Root: Root{
+			Agent: Agent{PollInterval: time.Second},
+			Paths: Paths{DevicesDir: "x", ThresholdsFile: "y", AdaptersFile: "z", QueueDB: "q.db"},
+			Discovery: Discovery{
+				Enabled:   true,
+				Interval:  0,
+				Interface: "",
+				Subnet:    "bad-subnet",
+				Provider:  "other",
+				SNMP: DiscoverySNMP{
+					Version:     "v3",
+					Community:   "",
+					Timeout:     0,
+					Concurrency: 0,
+				},
+				AutoPromote: DiscoveryAutoPromote{
+					MaxNewDevicesPerCycle: -1,
+					WriteTo:               "",
+				},
+				Exploration: DiscoveryExploration{
+					Enabled: true,
+					RunWhen: "always",
+				},
+			},
+		},
+		Devices:  []Device{{ID: "d1", Address: "127.0.0.1"}},
+		Adapters: AdaptersConfig{Adapters: AdaptersSection{Active: "tui", Configs: map[string]any{}}},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected error")
+	}
+}

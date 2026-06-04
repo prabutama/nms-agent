@@ -170,6 +170,11 @@ nms-agentctl threshold set --config configs/agent.yml --metric <name> --operator
 
 # Adapter health check
 nms-agentctl adapter health --config configs/agent.yml
+
+# Discovery commands
+nms-agentctl discovery status --config configs/agent.yml
+nms-agentctl discovery preview --config configs/agent.yml
+nms-agentctl discovery run --config configs/agent.yml
 ```
 
 ## Architecture

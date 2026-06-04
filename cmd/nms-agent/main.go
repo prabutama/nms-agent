@@ -14,6 +14,9 @@ import (
 	"nms-agent/internal/collectors"
 	"nms-agent/internal/config"
 	"nms-agent/internal/core"
+	"nms-agent/internal/discovery"
+	discoveryexplorer "nms-agent/internal/discovery/explorer"
+	discoverynetlink "nms-agent/internal/discovery/providers/netlink"
 	"nms-agent/internal/models"
 	"nms-agent/internal/processors"
 	"nms-agent/internal/profiles"
@@ -179,6 +182,7 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
 	}
+	discoverySvc := discovery.Service{Provider: discoverynetlink.Provider{}, Prober: discovery.SNMPProber{}, Explorer: discoveryexplorer.Explorer{}}
 
 	reloadCh := make(chan os.Signal, 1)
 	if sigs := reloadSignals(); len(sigs) > 0 {
@@ -189,6 +193,51 @@ func run(args []string) int {
 	pollInterval := loaded.Root.Agent.PollInterval
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
+	var discoveryTicker *time.Ticker
+	var discoveryCh <-chan time.Time
+	if loaded.Root.Discovery.Enabled {
+		discoveryTicker = time.NewTicker(loaded.Root.Discovery.Interval)
+		discoveryCh = discoveryTicker.C
+	}
+	defer func() {
+		if discoveryTicker != nil {
+			discoveryTicker.Stop()
+		}
+	}()
+	reloadPipeline := func(newLoaded config.Loaded) bool {
+		loc, err := config.LoadLocation(newLoaded.Root.Agent.Output.Timezone)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+			return false
+		}
+		adapters.SetOutputLocation(loc)
+		newP, newAdapter, err := buildPipeline(newLoaded, queuePath, q, viewHub)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+			return false
+		}
+		if c, ok := adapter.(adapters.Closable); ok {
+			_ = c.Close()
+		}
+		adapter = newAdapter
+		p = newP
+		if newLoaded.Root.Agent.PollInterval != pollInterval {
+			pollInterval = newLoaded.Root.Agent.PollInterval
+			ticker.Stop()
+			ticker = time.NewTicker(pollInterval)
+		}
+		if discoveryTicker != nil {
+			discoveryTicker.Stop()
+			discoveryTicker = nil
+			discoveryCh = nil
+		}
+		if newLoaded.Root.Discovery.Enabled {
+			discoveryTicker = time.NewTicker(newLoaded.Root.Discovery.Interval)
+			discoveryCh = discoveryTicker.C
+		}
+		loaded = newLoaded
+		return true
+	}
 
 	for {
 		if err := p.RunOnce(ctx); err != nil {
@@ -207,30 +256,34 @@ func run(args []string) int {
 				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
 				continue
 			}
-			loc, err := config.LoadLocation(newLoaded.Root.Agent.Output.Timezone)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+			if !reloadPipeline(newLoaded) {
 				continue
 			}
-			adapters.SetOutputLocation(loc)
-
-			// Rebuild pipeline (queue remains opened).
-			newP, newAdapter, err := buildPipeline(newLoaded, queuePath, q, viewHub)
+			fmt.Fprintf(os.Stdout, "reloaded config: devices=%d adapter.active=%s\n", len(loaded.Devices), loaded.Adapters.Adapters.Active)
+			continue
+		case <-discoveryCh:
+			res, err := discoverySvc.RunOnce(ctx, configAbs, loaded)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+				fmt.Fprintf(os.Stderr, "discovery failed: %v\n", err)
 				continue
 			}
-			if c, ok := adapter.(adapters.Closable); ok {
-				_ = c.Close()
+			if res.CandidatesFound > 0 || res.ExistingSkipped > 0 || res.Promoted > 0 || len(res.SkippedReasons) > 0 {
+				fmt.Fprintf(os.Stdout, "discovery: candidates=%d existing_skipped=%d snmp_ok=%d profile_matched=%d promoted=%d\n", res.CandidatesFound, res.ExistingSkipped, res.SNMPOK, res.ProfileMatched, res.Promoted)
 			}
-			adapter = newAdapter
-			p = newP
-			if newLoaded.Root.Agent.PollInterval != pollInterval {
-				pollInterval = newLoaded.Root.Agent.PollInterval
-				ticker.Stop()
-				ticker = time.NewTicker(pollInterval)
+			if res.Changed {
+				newLoaded, err := config.LoadFromFile(configAbs)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "discovery reload failed: %v\n", err)
+					continue
+				}
+				if err := config.Validate(newLoaded); err != nil {
+					fmt.Fprintf(os.Stderr, "discovery reload failed: %v\n", err)
+					continue
+				}
+				if reloadPipeline(newLoaded) {
+					fmt.Fprintf(os.Stdout, "discovery reloaded config: devices=%d adapter.active=%s\n", len(loaded.Devices), loaded.Adapters.Adapters.Active)
+				}
 			}
-			fmt.Fprintf(os.Stdout, "reloaded config: devices=%d adapter.active=%s\n", len(newLoaded.Devices), newLoaded.Adapters.Adapters.Active)
 			continue
 		case <-ticker.C:
 		}

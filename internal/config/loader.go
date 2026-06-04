@@ -77,6 +77,15 @@ func loadRoot(path string) (Root, error) {
 	root.Paths.AdaptersFile = strings.TrimSpace(root.Paths.AdaptersFile)
 	root.Paths.QueueDB = strings.TrimSpace(root.Paths.QueueDB)
 	root.Paths.ProfilesDir = strings.TrimSpace(root.Paths.ProfilesDir)
+	root.Discovery.Interface = strings.TrimSpace(root.Discovery.Interface)
+	root.Discovery.Subnet = strings.TrimSpace(root.Discovery.Subnet)
+	root.Discovery.Provider = strings.TrimSpace(root.Discovery.Provider)
+	root.Discovery.SNMP.Version = strings.TrimSpace(root.Discovery.SNMP.Version)
+	root.Discovery.SNMP.Community = strings.TrimSpace(root.Discovery.SNMP.Community)
+	root.Discovery.AutoPromote.DeviceIDTemplate = strings.TrimSpace(root.Discovery.AutoPromote.DeviceIDTemplate)
+	root.Discovery.AutoPromote.WriteTo = strings.TrimSpace(root.Discovery.AutoPromote.WriteTo)
+	root.Discovery.Exploration.RunWhen = strings.TrimSpace(root.Discovery.Exploration.RunWhen)
+	root.Discovery.Exploration.OutputDir = strings.TrimSpace(root.Discovery.Exploration.OutputDir)
 	return root, nil
 }
 
