@@ -1643,4 +1643,19 @@ Notes:
 - Discovery probe now parses `sysObjectID` from SNMP `ObjectIdentifier` values, not only string/byte values.
 - Added normalization for `iso.` prefix and leading-dot OID forms so resolver sees numeric dotted OIDs.
 - Added regression tests for MikroTik-like `sysObjectID` representation.
+ 
+2026-06-05 10:40
+Task: Fix discovery fingerprint mapping for normalized SNMP response OID names
+Changed files:
+- internal/discovery/snmp_probe.go
+- internal/discovery/snmp_probe_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/discovery ./cmd/nms-agentctl
+Status update:
+- Phase 14D follow-up: normalized response OID mapping DONE
+Notes:
+- Discovery probe now normalizes `pkt.Variables[].Name` before mapping `sysObjectID`, `sysName`, and `sysDescr` into the fingerprint.
+- Added regression coverage for SNMP responses that return names like `.1.3.6.1.2.1.1.2.0` while still carrying `ObjectIdentifier` values such as `iso.3.6.1.4.1.14988.1`.
 ```

@@ -62,22 +62,26 @@ func (p SNMPProber) Probe(ctx context.Context, candidate Candidate, cfg config.D
 	}
 	fp.SNMPOK = true
 	for _, v := range pkt.Variables {
-		switch v.Name {
-		case oidSysObjectID:
-			if s, ok := pduToOIDString(v); ok {
-				fp.SysObjectID = s
-			}
-		case oidSysName:
-			if s, ok := pduToString(v); ok {
-				fp.SysName = s
-			}
-		case oidSysDescr:
-			if s, ok := pduToString(v); ok {
-				fp.SysDescr = s
-			}
-		}
+		assignFingerprintField(&fp, v)
 	}
 	return fp, nil
+}
+
+func assignFingerprintField(fp *Fingerprint, pdu g.SnmpPDU) {
+	switch normalizeOIDString(pdu.Name) {
+	case oidSysObjectID:
+		if s, ok := pduToOIDString(pdu); ok {
+			fp.SysObjectID = s
+		}
+	case oidSysName:
+		if s, ok := pduToString(pdu); ok {
+			fp.SysName = s
+		}
+	case oidSysDescr:
+		if s, ok := pduToString(pdu); ok {
+			fp.SysDescr = s
+		}
+	}
 }
 
 func expandSNMPCommunity(s string) string {
