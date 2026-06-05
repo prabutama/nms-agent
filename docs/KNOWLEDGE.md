@@ -91,9 +91,10 @@
 | `cmd/nms-agentctl/view.go`                 | Implementasi `nms-agentctl view` untuk connect ke daemon via Unix socket, menampilkan snapshot + live update telemetry dengan adapter-specific rendering dan timezone dari config.                      |
 | `cmd/nms-agentctl/device.go`                 | CLI device management dengan wizard interaktif otomatis saat flag tidak lengkap (deteksi TTY).                                             |
 | `internal/viewer/message.go`                 | Tipe pesan JSON untuk viewer client (`snapshot` / `telemetry` / `status` dengan status + details).                                                                             |
-| `internal/viewer/hub.go`                     | Hub lokal untuk menyimpan snapshot telemetry dan broadcast live update ke subscriber + status updates (StatusUpdate).                                                         |
+| `internal/viewer/hub.go`                     | Hub lokal untuk menyimpan snapshot telemetry (merge kumulatif per device+metric+ifIndex) dan broadcast live update ke subscriber + status updates (StatusUpdate).                                                         |
 | `internal/viewer/server.go`                  | Unix socket server untuk daemon: menerima koneksi viewer, kirim snapshot + stream live.                                                        |
 | `internal/viewer/client.go`                  | Unix socket client untuk `nms-agentctl view`: connect, baca snapshot, subscribe live.                                                          |
+| `internal/viewer/hub_test.go`                | Unit test merge snapshot viewer: multi-device merge, replace same key, different ifIndex.                                                          |
 | `README.md`                      | Dokumentasi utama proyek: quick start, install, config reference, CLI commands, arsitektur, dan demo guide.                                   |
 | `docs/TROUBLESHOOTING.md`        | Panduan troubleshooting: config errors, collector errors, queue errors, adapter errors, reload errors, systemd issues, dan performance.    |
 | `docs/SECURITY.md`               | Panduan keamanan: credential handling, file permissions, network security, TLS, queue data, dan known security considerations.               |

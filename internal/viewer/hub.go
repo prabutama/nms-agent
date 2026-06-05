@@ -84,16 +84,47 @@ func (h *Hub) Update(batch []models.Telemetry) {
 	if len(batch) == 0 {
 		return
 	}
-	h.mu.Lock()
-	// keep only the latest batch for snapshot (small and testable for now)
-	h.snapshot = append([]models.Telemetry(nil), batch...)
+	h.mergeSnapshot(batch)
 	for ch := range h.subscribers {
 		select {
 		case ch <- batch:
 		default:
 		}
 	}
-	h.mu.Unlock()
+}
+
+func (h *Hub) mergeSnapshot(batch []models.Telemetry) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	snap := make([]models.Telemetry, 0, len(h.snapshot)+len(batch))
+	keyMap := make(map[string]bool, len(h.snapshot))
+	for _, t := range h.snapshot {
+		k := telemetryKey(t)
+		keyMap[k] = true
+		snap = append(snap, t)
+	}
+	for _, t := range batch {
+		k := telemetryKey(t)
+		if keyMap[k] {
+			for i, existing := range snap {
+				if telemetryKey(existing) == k {
+					snap[i] = t
+					break
+				}
+			}
+		} else {
+			keyMap[k] = true
+			snap = append(snap, t)
+		}
+	}
+	h.snapshot = snap
+}
+
+func telemetryKey(t models.Telemetry) string {
+	if len(t.Tags) == 0 {
+		return t.DeviceID + "|" + t.Metric
+	}
+	return t.DeviceID + "|" + t.Metric + "|" + t.Tags["ifIndex"]
 }
 
 func (h *Hub) Subscribe() chan []models.Telemetry {

@@ -1658,4 +1658,21 @@ Status update:
 Notes:
 - Discovery probe now normalizes `pkt.Variables[].Name` before mapping `sysObjectID`, `sysName`, and `sysDescr` into the fingerprint.
 - Added regression coverage for SNMP responses that return names like `.1.3.6.1.2.1.1.2.0` while still carrying `ObjectIdentifier` values such as `iso.3.6.1.4.1.14988.1`.
+
+2026-06-05 11:15
+Task: Fix viewer summary showing wrong device count after discovery auto-promote
+Changed files:
+- internal/viewer/hub.go
+- internal/viewer/hub_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/viewer ./cmd/nms-agentctl
+Status update:
+- Phase 14E: viewer summary merge DONE
+Notes:
+- Hub.Update() now merges telemetry into snapshot by key (device_id + metric + ifIndex) instead of overwriting with latest batch.
+- Summary view now counts devices from merged snapshot, so devices promoted by discovery appear correctly without requiring restart.
+- Live telemetry broadcast unchanged for view --mode raw.
+- Added unit tests for multi-device merge, same-key replace, and different ifIndex.
 ```
