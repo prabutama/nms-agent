@@ -1675,4 +1675,30 @@ Notes:
 - Summary view now counts devices from merged snapshot, so devices promoted by discovery appear correctly without requiring restart.
 - Live telemetry broadcast unchanged for view --mode raw.
 - Added unit tests for multi-device merge, same-key replace, and different ifIndex.
+
+2026-06-05 13:20
+Task: Add automatic devices.d reload and active ICMP discovery provider
+Changed files:
+- cmd/nms-agent/main.go
+- cmd/nms-agentctl/discover.go
+- cmd/nms-agentctl/discover_test.go
+- internal/config/types.go
+- internal/config/validate.go
+- internal/configwatch/devices_watcher.go
+- internal/configwatch/devices_watcher_test.go
+- internal/discovery/providers/factory.go
+- internal/discovery/providers/factory_test.go
+- internal/discovery/providers/active/provider.go
+- internal/discovery/providers/active/provider_test.go
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/configwatch ./internal/discovery/providers/... ./cmd/nms-agent ./cmd/nms-agentctl
+Status update:
+- Phase 14F: automatic runtime reload and active discovery DONE
+Notes:
+- Daemon sekarang memantau `devices.d` dan reload runtime otomatis saat file device `.yml/.yaml` berubah, sehingga device baru ikut polling tanpa restart service bila config valid.
+- Discovery provider sekarang dipilih dari config dan mendukung `provider: active` untuk ICMP subnet probe selain mode pasif `netlink`.
+- CLI discovery manual dan daemon discovery loop sekarang memakai factory provider yang sama agar perilaku candidate konsisten.
 ```

@@ -13,10 +13,11 @@ import (
 	"nms-agent/internal/adapters"
 	"nms-agent/internal/collectors"
 	"nms-agent/internal/config"
+	"nms-agent/internal/configwatch"
 	"nms-agent/internal/core"
 	"nms-agent/internal/discovery"
 	discoveryexplorer "nms-agent/internal/discovery/explorer"
-	discoverynetlink "nms-agent/internal/discovery/providers/netlink"
+	discoveryproviders "nms-agent/internal/discovery/providers"
 	"nms-agent/internal/models"
 	"nms-agent/internal/processors"
 	"nms-agent/internal/profiles"
@@ -182,13 +183,30 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
 	}
-	discoverySvc := discovery.Service{Provider: discoverynetlink.Provider{}, Prober: discovery.SNMPProber{}, Explorer: discoveryexplorer.Explorer{}}
+	discoverySvc := newDiscoveryService(loaded)
 
 	reloadCh := make(chan os.Signal, 1)
 	if sigs := reloadSignals(); len(sigs) > 0 {
 		signal.Notify(reloadCh, sigs...)
 		defer signal.Stop(reloadCh)
 	}
+
+	var devicesWatcher *configwatch.DevicesWatcher
+	var devicesChangedCh <-chan struct{}
+	watcherPath := config.ResolvePath(filepath.Dir(configAbs), loaded.Root.Paths.DevicesDir)
+	if watcherPath != "" {
+		devicesWatcher = configwatch.NewDevicesWatcher(watcherPath, 500*time.Millisecond)
+		if err := devicesWatcher.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not start devices watcher: %v\n", err)
+		} else {
+			devicesChangedCh = devicesWatcher.Changes()
+		}
+	}
+	defer func() {
+		if devicesWatcher != nil {
+			devicesWatcher.Stop()
+		}
+	}()
 
 	pollInterval := loaded.Root.Agent.PollInterval
 	ticker := time.NewTicker(pollInterval)
@@ -235,6 +253,24 @@ func run(args []string) int {
 			discoveryTicker = time.NewTicker(newLoaded.Root.Discovery.Interval)
 			discoveryCh = discoveryTicker.C
 		}
+		discoverySvc = newDiscoveryService(newLoaded)
+		newWatcherPath := config.ResolvePath(filepath.Dir(configAbs), newLoaded.Root.Paths.DevicesDir)
+		if newWatcherPath != watcherPath {
+			if devicesWatcher != nil {
+				devicesWatcher.Stop()
+				devicesWatcher = nil
+				devicesChangedCh = nil
+			}
+			watcherPath = newWatcherPath
+			if watcherPath != "" {
+				devicesWatcher = configwatch.NewDevicesWatcher(watcherPath, 500*time.Millisecond)
+				if err := devicesWatcher.Start(); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: could not restart devices watcher: %v\n", err)
+				} else {
+					devicesChangedCh = devicesWatcher.Changes()
+				}
+			}
+		}
 		loaded = newLoaded
 		return true
 	}
@@ -260,6 +296,20 @@ func run(args []string) int {
 				continue
 			}
 			fmt.Fprintf(os.Stdout, "reloaded config: devices=%d adapter.active=%s\n", len(loaded.Devices), loaded.Adapters.Adapters.Active)
+			continue
+		case <-devicesChangedCh:
+			newLoaded, err := config.LoadFromFile(configAbs)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "devices watcher reload failed: %v\n", err)
+				continue
+			}
+			if err := config.Validate(newLoaded); err != nil {
+				fmt.Fprintf(os.Stderr, "devices watcher reload failed: %v\n", err)
+				continue
+			}
+			if reloadPipeline(newLoaded) {
+				fmt.Fprintf(os.Stdout, "devices watcher reloaded config: devices=%d adapter.active=%s\n", len(loaded.Devices), loaded.Adapters.Adapters.Active)
+			}
 			continue
 		case <-discoveryCh:
 			res, err := discoverySvc.RunOnce(ctx, configAbs, loaded)
@@ -288,6 +338,10 @@ func run(args []string) int {
 		case <-ticker.C:
 		}
 	}
+}
+
+func newDiscoveryService(loaded config.Loaded) discovery.Service {
+	return discovery.Service{Provider: discoveryproviders.New(loaded), Prober: discovery.SNMPProber{}, Explorer: discoveryexplorer.Explorer{}}
 }
 
 func buildCollector(mode string, loaded config.Loaded) (collectors.Collector, error) {

@@ -69,9 +69,15 @@ type Discovery struct {
 	Interface   string               `yaml:"interface"`
 	Subnet      string               `yaml:"subnet"`
 	Provider    string               `yaml:"provider"`
+	ActiveProbe DiscoveryActiveProbe `yaml:"active_probe"`
 	SNMP        DiscoverySNMP        `yaml:"snmp"`
 	AutoPromote DiscoveryAutoPromote `yaml:"auto_promote"`
 	Exploration DiscoveryExploration `yaml:"exploration"`
+}
+
+type DiscoveryActiveProbe struct {
+	Timeout     time.Duration `yaml:"timeout"`
+	Concurrency int           `yaml:"concurrency"`
 }
 
 type DiscoverySNMP struct {

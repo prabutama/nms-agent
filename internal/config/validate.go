@@ -53,8 +53,17 @@ func Validate(cfg Loaded) error {
 		} else if _, _, err := net.ParseCIDR(d.Subnet); err != nil {
 			errs = append(errs, "discovery.subnet must be valid CIDR")
 		}
-		if strings.TrimSpace(d.Provider) != "netlink" {
-			errs = append(errs, "discovery.provider must be 'netlink'")
+		switch strings.TrimSpace(d.Provider) {
+		case "", "netlink", "active":
+			// ok
+		default:
+			errs = append(errs, "discovery.provider must be 'netlink' or 'active'")
+		}
+		if d.ActiveProbe.Timeout < 0 {
+			errs = append(errs, "discovery.active_probe.timeout must be >= 0")
+		}
+		if d.ActiveProbe.Concurrency < 0 {
+			errs = append(errs, "discovery.active_probe.concurrency must be >= 0")
 		}
 		if strings.TrimSpace(d.SNMP.Version) != "v2c" {
 			errs = append(errs, "discovery.snmp.version must be 'v2c'")

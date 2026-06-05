@@ -38,7 +38,7 @@ func TestDiscoveryPreview_DoesNotWriteDevice(t *testing.T) {
 	agentYml := writeDiscoveryAgentFiles(t, tmp)
 	oldFactory := newDiscoveryService
 	defer func() { newDiscoveryService = oldFactory }()
-	newDiscoveryService = func() discovery.Service {
+	newDiscoveryService = func(_ config.Loaded) discovery.Service {
 		return discovery.Service{
 			Provider: cliFakeProvider{candidates: []discovery.Candidate{{Address: "192.168.10.10", Interface: "eth0", Source: "test"}}},
 			Prober: cliFakeProber{byAddress: map[string]discovery.Fingerprint{
@@ -60,7 +60,7 @@ func TestDiscoveryRun_WritesDevice(t *testing.T) {
 	agentYml := writeDiscoveryAgentFiles(t, tmp)
 	oldFactory := newDiscoveryService
 	defer func() { newDiscoveryService = oldFactory }()
-	newDiscoveryService = func() discovery.Service {
+	newDiscoveryService = func(_ config.Loaded) discovery.Service {
 		return discovery.Service{
 			Provider: cliFakeProvider{candidates: []discovery.Candidate{{Address: "192.168.10.10", Interface: "eth0", Source: "test"}}},
 			Prober: cliFakeProber{byAddress: map[string]discovery.Fingerprint{

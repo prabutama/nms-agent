@@ -10,12 +10,12 @@ import (
 	"nms-agent/internal/config"
 	"nms-agent/internal/discovery"
 	discoveryexplorer "nms-agent/internal/discovery/explorer"
-	discoverynetlink "nms-agent/internal/discovery/providers/netlink"
+	discoveryproviders "nms-agent/internal/discovery/providers"
 )
 
-var newDiscoveryService = func() discovery.Service {
+var newDiscoveryService = func(loaded config.Loaded) discovery.Service {
 	return discovery.Service{
-		Provider: discoverynetlink.Provider{},
+		Provider: discoveryproviders.New(loaded),
 		Prober:   discovery.SNMPProber{},
 		Explorer: discoveryexplorer.Explorer{},
 	}
@@ -86,7 +86,7 @@ func runDiscoveryCommand(args []string, apply bool) int {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
 	}
-	svc := newDiscoveryService()
+	svc := newDiscoveryService(loaded)
 	var res discovery.Result
 	if apply {
 		res, err = svc.RunOnce(context.Background(), configAbs, loaded)

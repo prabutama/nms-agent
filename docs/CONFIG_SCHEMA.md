@@ -39,6 +39,10 @@ discovery:
   subnet: 192.168.10.0/24
   provider: netlink
 
+  active_probe:
+    timeout: 1s
+    concurrency: 64
+
   snmp:
     version: v2c
     community: ${SNMP_COMMUNITY}
@@ -78,12 +82,17 @@ Notes:
 - `paths.*` may be relative to the directory containing `agent.yml`.
 - `${ENV_VAR}` expansion is supported for path strings via the current process environment.
 - `paths.queue_db` is the SQLite DB file path for the local durable queue. Its parent directory is created at runtime if missing.
-- `discovery.*` is optional. Milestone A currently implements passive candidate discovery from Linux netlink/ARP neighbor table only.
+- `discovery.*` is optional. Discovery supports passive `netlink` candidates and active ICMP subnet probing via `active`.
 - `discovery.interface` is the local network interface name on the gateway host (for example `eth0`, `ens18`, `br-lan`).
 - `discovery.subnet` filters candidates to a single target CIDR.
-- `discovery.provider` currently supports only `netlink`.
+- `discovery.provider` supports:
+  - `netlink`: passive Linux neighbor/ARP discovery. Host biasanya baru terlihat setelah ada traffic/ARP entry.
+  - `active`: active ICMP probe ke seluruh host dalam subnet agar candidate baru bisa muncul tanpa ping manual terlebih dahulu.
+- `discovery.active_probe.timeout` membatasi satu ICMP probe per host (default `1s`).
+- `discovery.active_probe.concurrency` mengatur jumlah probe ICMP paralel (default `64`).
 - `discovery.snmp.community` supports `${ENV_VAR}` expansion through the current process environment.
 - `discovery.exploration.*` is active in Milestone B using a static safe OID catalog (system, interfaces, host-resources). It is not a full arbitrary-tree SNMP walk.
+- Perubahan file `devices.d/*.yml` sekarang dipantau daemon; jika file device ditambah/diubah/dihapus dan config valid, runtime akan reload otomatis tanpa restart service.
 
 ## configs/devices.d/*.yml
 
