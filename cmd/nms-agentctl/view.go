@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"nms-agent/internal/adapters"
@@ -47,6 +48,8 @@ func runView(args []string) int {
 	defer cli.Close()
 
 	var state *adapters.State
+	interactiveSummary := *mode == "summary" && isInteractiveStdout()
+	printedSummaryLines := 0
 	for {
 		msg, err := cli.Next()
 		if err != nil {
@@ -57,7 +60,7 @@ func runView(args []string) int {
 		if msg.Type == "snapshot" {
 			if *mode == "summary" {
 				state = adapters.NewStateFromTelemetry(msg.Telemetry)
-				renderSummaryFromState(msg.Adapter, state, loc)
+				printedSummaryLines = renderSummaryFromState(msg.Adapter, state, loc, interactiveSummary, printedSummaryLines)
 			} else {
 				renderRawSnapshot(msg.Adapter, msg.Telemetry, loc)
 			}
@@ -67,17 +70,20 @@ func runView(args []string) int {
 					state = adapters.NewState()
 				}
 				state.ApplyBatch(msg.Telemetry)
-				renderSummaryFromState(msg.Adapter, state, loc)
+				printedSummaryLines = renderSummaryFromState(msg.Adapter, state, loc, interactiveSummary, printedSummaryLines)
 			} else {
 				renderRawTelemetry(msg.Adapter, msg.Telemetry, msg.At, loc)
 			}
 		} else if msg.Type == "status" {
+			if *mode == "summary" {
+				printedSummaryLines = 0
+			}
 			renderStatus(msg.Adapter, msg.Status, msg.Details, msg.At, loc)
 		}
 	}
 }
 
-func renderSummaryFromState(adapter string, st *adapters.State, loc *time.Location) {
+func renderSummaryFromState(adapter string, st *adapters.State, loc *time.Location, interactive bool, previousLines int) int {
 	if st == nil {
 		st = adapters.NewState()
 	}
@@ -85,55 +91,60 @@ func renderSummaryFromState(adapter string, st *adapters.State, loc *time.Locati
 	if loc2 == nil {
 		loc2 = time.Local
 	}
+	if interactive && previousLines > 0 {
+		fmt.Fprintf(os.Stdout, "\x1b[%dA\x1b[J", previousLines)
+	}
 
-	fmt.Fprint(os.Stdout, "=== Summary (adapter: ")
-	fmt.Fprint(os.Stdout, adapter)
-	fmt.Fprint(os.Stdout, ") ===\n")
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("=== Summary (adapter: %s) ===\n", adapter))
 
 	total, up, down, unknown := st.DeviceCounts()
-	fmt.Fprintf(os.Stdout, "  Devices: total=%d up=%d down=%d unknown=%d\n", total, up, down, unknown)
+	warning, critical := st.AlertCounts()
+	b.WriteString(fmt.Sprintf("  Devices: total=%d up=%d down=%d unknown=%d\n", total, up, down, unknown))
+	b.WriteString(fmt.Sprintf("  Alerts: warning=%d critical=%d\n", warning, critical))
 
 	if st.LastSeen != (time.Time{}) {
-		fmt.Fprintf(os.Stdout, "  Last update: %s\n", st.LastSeen.In(loc2).Format(time.RFC3339))
+		b.WriteString(fmt.Sprintf("  Last update: %s\n", st.LastSeen.In(loc2).Format(time.RFC3339)))
+	}
+	if total > 0 {
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf("  %-24s %-8s %-10s %-10s %-8s %-8s\n", "DEVICE", "STATUS", "LAST SEEN", "LATENCY", "LOSS", "ALERTS"))
+		b.WriteString(fmt.Sprintf("  %-24s %-8s %-10s %-10s %-8s %-8s\n", strings.Repeat("-", 24), strings.Repeat("-", 8), strings.Repeat("-", 10), strings.Repeat("-", 10), strings.Repeat("-", 8), strings.Repeat("-", 8)))
+		for _, name := range st.SortedDevices() {
+			ds := st.Devices[name]
+			status := deviceStatus(ds)
+			lastSeen := "-"
+			if !ds.LastSeen.IsZero() {
+				lastSeen = ds.LastSeen.In(loc2).Format("15:04:05")
+			}
+			latency := "-"
+			if ds.LatencyMS != nil {
+				latency = fmt.Sprintf("%.1f ms", *ds.LatencyMS)
+			}
+			loss := "-"
+			if ds.LossPct != nil {
+				loss = fmt.Sprintf("%.0f%%", *ds.LossPct)
+			}
+			wc, cc := st.DeviceAlertCounts(name)
+			alerts := "0"
+			if wc > 0 || cc > 0 {
+				parts := make([]string, 0, 2)
+				if wc > 0 {
+					parts = append(parts, fmt.Sprintf("W%d", wc))
+				}
+				if cc > 0 {
+					parts = append(parts, fmt.Sprintf("C%d", cc))
+				}
+				alerts = strings.Join(parts, " ")
+			}
+			b.WriteString(fmt.Sprintf("  %-24s %-8s %-10s %-10s %-8s %-8s\n", truncateText(name, 24), status, lastSeen, latency, loss, alerts))
+		}
 	}
 
-	fmt.Fprintln(os.Stdout, "=== End Summary ===")
-}
-
-func renderSummary(adapter string, telemetry []models.Telemetry, loc *time.Location) {
-	st := adapters.NewStateFromTelemetry(telemetry)
-	loc2 := loc
-	if loc2 == nil {
-		loc2 = time.Local
-	}
-
-	fmt.Fprintf(os.Stdout, "=== Summary (adapter: %s) ===\n", adapter)
-
-	total, up, down, unknown := st.DeviceCounts()
-	fmt.Fprintf(os.Stdout, "  Devices: total=%d up=%d down=%d unknown=%d\n", total, up, down, unknown)
-
-	if len(telemetry) > 0 {
-		fmt.Fprintf(os.Stdout, "  Last update: %s\n", st.LastSeen.In(loc2).Format(time.RFC3339))
-	}
-
-	fmt.Fprintln(os.Stdout, "=== End Summary ===")
-}
-
-func renderSummaryUpdate(adapter string, telemetry []models.Telemetry, at time.Time, loc *time.Location) {
-	if len(telemetry) == 0 {
-		return
-	}
-	loc2 := loc
-	if loc2 == nil {
-		loc2 = time.Local
-	}
-	ts := at.In(loc2)
-	fmt.Fprintf(os.Stdout, "[%s] adapter=%s batch=%d devices=%s\n",
-		ts.Format(time.RFC3339),
-		adapter,
-		len(telemetry),
-		uniqueDevices(telemetry),
-	)
+	b.WriteString("=== End Summary ===\n")
+	output := b.String()
+	fmt.Fprint(os.Stdout, output)
+	return strings.Count(output, "\n")
 }
 
 func renderRawSnapshot(adapter string, telemetry []models.Telemetry, loc *time.Location) {
@@ -176,16 +187,38 @@ func renderStatus(adapter, status, details string, at time.Time, loc *time.Locat
 	fmt.Fprintln(os.Stdout)
 }
 
-func uniqueDevices(telemetry []models.Telemetry) string {
-	devices := make(map[string]bool)
-	for _, t := range telemetry {
-		devices[t.DeviceID] = true
+func deviceStatus(ds struct {
+	Reachable *bool
+	LatencyMS *float64
+	JitterMS  *float64
+	LossPct   *float64
+	LastSeen  time.Time
+}) string {
+	if ds.Reachable == nil {
+		return "unknown"
 	}
-	parts := make([]string, 0, len(devices))
-	for d := range devices {
-		parts = append(parts, d)
+	if *ds.Reachable {
+		return "up"
 	}
-	return fmt.Sprintf("%v", parts)
+	return "down"
+}
+
+func truncateText(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	if max <= 3 {
+		return s[:max]
+	}
+	return s[:max-3] + "..."
+}
+
+func isInteractiveStdout() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
 func formatValue(t models.Telemetry) string {

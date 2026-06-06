@@ -1690,6 +1690,21 @@ Notes:
 - `nms-agentctl view --mode summary` now maintains a local state that applies every live telemetry batch.
 - Summary block is re-rendered on every batch, so new devices and up/down status changes appear automatically without re-running the command.
 - `renderSummaryFromState` helper computes total/up/down/unknown from the aggregated state instead of a single batch.
+
+2026-06-06 09:40
+Task: Improve summary mode with per-device status table and in-place redraw
+Changed files:
+- cmd/nms-agentctl/view.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./cmd/nms-agentctl
+Status update:
+- Phase 14G follow-up: interactive summary rendering DONE
+Notes:
+- `view --mode summary` now renders a per-device table with status, last seen, latency, loss, and alert counts.
+- On interactive terminals, summary updates redraw in place instead of printing a new summary block every batch.
+- Live summary still updates from aggregated telemetry state, so newly discovered devices and up/down changes appear automatically.
 ```
 
 2026-06-05 13:20
