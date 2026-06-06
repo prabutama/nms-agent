@@ -218,7 +218,7 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		}
 
 		metricKey := t.Metric
-		if flatKey, ok := thingsBoardFlattenedInterfaceKey(t); ok {
+		if flatKey, ok := thingsBoardFlattenedIndexedKey(t); ok {
 			delete(values, t.Metric)
 			metricKey = flatKey
 		}
@@ -255,10 +255,17 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	return nil
 }
 
-func thingsBoardFlattenedInterfaceKey(t models.Telemetry) (string, bool) {
-	if !strings.HasPrefix(t.Metric, "snmp.if.") {
-		return "", false
+func thingsBoardFlattenedIndexedKey(t models.Telemetry) (string, bool) {
+	if strings.HasPrefix(t.Metric, "snmp.if.") {
+		return thingsBoardFlattenedInterfaceKey(t)
 	}
+	if strings.HasPrefix(t.Metric, "snmp.host.storage.") {
+		return thingsBoardFlattenedStorageKey(t)
+	}
+	return "", false
+}
+
+func thingsBoardFlattenedInterfaceKey(t models.Telemetry) (string, bool) {
 	if t.Tags == nil {
 		return "", false
 	}
@@ -282,6 +289,25 @@ func thingsBoardFlattenedInterfaceKey(t models.Telemetry) (string, bool) {
 	flat = append(flat, parts[:2]...)
 	flat = append(flat, identity)
 	flat = append(flat, parts[2:]...)
+	return strings.Join(flat, "."), true
+}
+
+func thingsBoardFlattenedStorageKey(t models.Telemetry) (string, bool) {
+	if t.Tags == nil {
+		return "", false
+	}
+	ifIndex := strings.TrimSpace(t.Tags["ifIndex"])
+	if ifIndex == "" {
+		return "", false
+	}
+	parts := strings.Split(t.Metric, ".")
+	if len(parts) < 4 {
+		return "", false
+	}
+	flat := make([]string, 0, len(parts)+1)
+	flat = append(flat, parts[:3]...)
+	flat = append(flat, "idx"+sanitizeThingsBoardKeyPart(ifIndex))
+	flat = append(flat, parts[3:]...)
 	return strings.Join(flat, "."), true
 }
 

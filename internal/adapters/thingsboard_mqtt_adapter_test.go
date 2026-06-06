@@ -234,7 +234,7 @@ func TestThingsBoardMQTTAdapter_SendBatch_FallsBackToIfIndexWhenSanitizedNameEmp
 	}
 }
 
-func TestThingsBoardMQTTAdapter_SendBatch_DoesNotFlattenIndexedNonInterfaceMetric(t *testing.T) {
+func TestThingsBoardMQTTAdapter_SendBatch_FlattensIndexedStorageMetric(t *testing.T) {
 	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -261,11 +261,52 @@ func TestThingsBoardMQTTAdapter_SendBatch_DoesNotFlattenIndexedNonInterfaceMetri
 		t.Fatalf("invalid json: %v", err)
 	}
 	vals := m["router-1"][0]["values"].(map[string]any)
-	if vals["snmp.host.storage.used_units"] == nil {
-		t.Fatalf("expected generic non-interface indexed key")
+	if vals["snmp.host.storage.idx65536.used_units"] == nil {
+		t.Fatalf("expected flattened storage key")
 	}
-	if vals["snmp.host.storage.idx65536.used_units"] != nil {
-		t.Fatalf("did not expect flattened non-interface indexed key")
+	if vals["snmp.host.storage.used_units"] != nil {
+		t.Fatalf("did not expect generic storage indexed key")
+	}
+	if vals["snmp.host.storage.idx65536.used_units__tags"] == nil {
+		t.Fatalf("expected flattened storage tags key")
+	}
+	if vals["snmp.host.storage.idx65536.used_units__value_type"] == nil {
+		t.Fatalf("expected flattened storage value_type key")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_SendBatch_DoesNotFlattenOtherIndexedMetric(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fcli := &fakeTBMQTTClient{connected: true, open: true, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+
+	val := 7.0
+	batch := []models.Telemetry{{
+		DeviceID:    "router-1",
+		Metric:      "snmp.other.indexed_metric",
+		TS:          time.Unix(10, 0).UTC(),
+		ValueType:   "number",
+		ValueNumber: &val,
+		Tags:        map[string]string{"ifIndex": "42", "source": "snmp"},
+	}}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	b := fcli.publishes[0].payload.([]byte)
+	var m map[string][]map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	vals := m["router-1"][0]["values"].(map[string]any)
+	if vals["snmp.other.indexed_metric"] == nil {
+		t.Fatalf("expected generic other indexed key")
+	}
+	if vals["snmp.other.idx42.indexed_metric"] != nil {
+		t.Fatalf("did not expect flattened other indexed key")
 	}
 }
 

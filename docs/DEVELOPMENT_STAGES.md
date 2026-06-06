@@ -1751,6 +1751,21 @@ Status update:
 Notes:
 - For `snmp.if.*` telemetry with `ifIndex`, ThingsBoard adapter now publishes only the flattened key plus flattened `__tags` and `__value_type`; the generic interface key is no longer emitted.
 - Non-indexed metrics keep the old generic format, and indexed non-interface metrics such as `snmp.host.storage.*` are intentionally unchanged.
+
+2026-06-06 11:20
+Task: Flatten indexed host storage metrics for ThingsBoard payloads
+Changed files:
+- internal/adapters/thingsboard_mqtt_adapter.go
+- internal/adapters/thingsboard_mqtt_adapter_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/adapters
+Status update:
+- Phase 14H follow-up: storage flattened payload DONE
+Notes:
+- `snmp.host.storage.*` telemetry with `ifIndex` now uses flattened-only ThingsBoard keys like `snmp.host.storage.idx65536.used_units`, with matching flattened `__tags` and `__value_type` keys.
+- Interface flattening behavior remains unchanged, while other indexed metrics outside `snmp.if.*` and `snmp.host.storage.*` still use the generic payload shape.
 ```
 
 2026-06-05 13:20
