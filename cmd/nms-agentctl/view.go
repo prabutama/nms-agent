@@ -46,6 +46,7 @@ func runView(args []string) int {
 	}
 	defer cli.Close()
 
+	var state *adapters.State
 	for {
 		msg, err := cli.Next()
 		if err != nil {
@@ -55,13 +56,18 @@ func runView(args []string) int {
 
 		if msg.Type == "snapshot" {
 			if *mode == "summary" {
-				renderSummary(msg.Adapter, msg.Telemetry, loc)
+				state = adapters.NewStateFromTelemetry(msg.Telemetry)
+				renderSummaryFromState(msg.Adapter, state, loc)
 			} else {
 				renderRawSnapshot(msg.Adapter, msg.Telemetry, loc)
 			}
 		} else if msg.Type == "telemetry" {
 			if *mode == "summary" {
-				renderSummaryUpdate(msg.Adapter, msg.Telemetry, msg.At, loc)
+				if state == nil {
+					state = adapters.NewState()
+				}
+				state.ApplyBatch(msg.Telemetry)
+				renderSummaryFromState(msg.Adapter, state, loc)
 			} else {
 				renderRawTelemetry(msg.Adapter, msg.Telemetry, msg.At, loc)
 			}
@@ -69,6 +75,29 @@ func runView(args []string) int {
 			renderStatus(msg.Adapter, msg.Status, msg.Details, msg.At, loc)
 		}
 	}
+}
+
+func renderSummaryFromState(adapter string, st *adapters.State, loc *time.Location) {
+	if st == nil {
+		st = adapters.NewState()
+	}
+	loc2 := loc
+	if loc2 == nil {
+		loc2 = time.Local
+	}
+
+	fmt.Fprint(os.Stdout, "=== Summary (adapter: ")
+	fmt.Fprint(os.Stdout, adapter)
+	fmt.Fprint(os.Stdout, ") ===\n")
+
+	total, up, down, unknown := st.DeviceCounts()
+	fmt.Fprintf(os.Stdout, "  Devices: total=%d up=%d down=%d unknown=%d\n", total, up, down, unknown)
+
+	if st.LastSeen != (time.Time{}) {
+		fmt.Fprintf(os.Stdout, "  Last update: %s\n", st.LastSeen.In(loc2).Format(time.RFC3339))
+	}
+
+	fmt.Fprintln(os.Stdout, "=== End Summary ===")
 }
 
 func renderSummary(adapter string, telemetry []models.Telemetry, loc *time.Location) {

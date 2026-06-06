@@ -1676,6 +1676,22 @@ Notes:
 - Live telemetry broadcast unchanged for view --mode raw.
 - Added unit tests for multi-device merge, same-key replace, and different ifIndex.
 
+2026-06-06 09:00
+Task: Fix view --mode summary to show live device count and up/down status
+Changed files:
+- cmd/nms-agentctl/view.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./cmd/nms-agentctl
+Status update:
+- Phase 14G: view summary live update DONE
+Notes:
+- `nms-agentctl view --mode summary` now maintains a local state that applies every live telemetry batch.
+- Summary block is re-rendered on every batch, so new devices and up/down status changes appear automatically without re-running the command.
+- `renderSummaryFromState` helper computes total/up/down/unknown from the aggregated state instead of a single batch.
+```
+
 2026-06-05 13:20
 Task: Add automatic devices.d reload and active ICMP discovery provider
 Changed files:
