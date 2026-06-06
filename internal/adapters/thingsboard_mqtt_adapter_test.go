@@ -115,8 +115,14 @@ func TestThingsBoardMQTTAdapter_SendBatch_AddsFlattenedInterfaceKeyUsingIfName(t
 	if vals["snmp.if.gi0-1.rx_bps"] == nil {
 		t.Fatalf("expected flattened ifName key")
 	}
-	if vals["snmp.if.rx_bps"] == nil {
-		t.Fatalf("expected canonical key")
+	if vals["snmp.if.rx_bps"] != nil {
+		t.Fatalf("did not expect generic interface key")
+	}
+	if vals["snmp.if.gi0-1.rx_bps__tags"] == nil {
+		t.Fatalf("expected flattened tags key")
+	}
+	if vals["snmp.if.gi0-1.rx_bps__value_type"] == nil {
+		t.Fatalf("expected flattened value_type key")
 	}
 }
 
@@ -150,6 +156,9 @@ func TestThingsBoardMQTTAdapter_SendBatch_SanitizesInterfaceNameToDashedLowercas
 	if vals["snmp.if.wan-isp-1-core.oper_status"] == nil {
 		t.Fatalf("expected sanitized flattened ifName key")
 	}
+	if vals["snmp.if.oper_status"] != nil {
+		t.Fatalf("did not expect generic interface key")
+	}
 }
 
 func TestThingsBoardMQTTAdapter_SendBatch_AddsFlattenedInterfaceKeyUsingIfIndexFallback(t *testing.T) {
@@ -182,6 +191,12 @@ func TestThingsBoardMQTTAdapter_SendBatch_AddsFlattenedInterfaceKeyUsingIfIndexF
 	if vals["snmp.if.idx9.oper_status"] == nil {
 		t.Fatalf("expected flattened ifIndex fallback key")
 	}
+	if vals["snmp.if.idx9.oper_status__tags"] == nil {
+		t.Fatalf("expected flattened fallback tags key")
+	}
+	if vals["snmp.if.oper_status"] != nil {
+		t.Fatalf("did not expect generic interface key")
+	}
 }
 
 func TestThingsBoardMQTTAdapter_SendBatch_FallsBackToIfIndexWhenSanitizedNameEmpty(t *testing.T) {
@@ -213,6 +228,44 @@ func TestThingsBoardMQTTAdapter_SendBatch_FallsBackToIfIndexWhenSanitizedNameEmp
 	vals := m["router-1"][0]["values"].(map[string]any)
 	if vals["snmp.if.idx8.tx_bps"] == nil {
 		t.Fatalf("expected ifIndex fallback when sanitized name becomes empty")
+	}
+	if vals["snmp.if.tx_bps"] != nil {
+		t.Fatalf("did not expect generic interface key")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_SendBatch_DoesNotFlattenIndexedNonInterfaceMetric(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fcli := &fakeTBMQTTClient{connected: true, open: true, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+
+	val := 1024.0
+	batch := []models.Telemetry{{
+		DeviceID:    "router-1",
+		Metric:      "snmp.host.storage.used_units",
+		TS:          time.Unix(10, 0).UTC(),
+		ValueType:   "number",
+		ValueNumber: &val,
+		Tags:        map[string]string{"ifIndex": "65536", "source": "snmp"},
+	}}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	b := fcli.publishes[0].payload.([]byte)
+	var m map[string][]map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	vals := m["router-1"][0]["values"].(map[string]any)
+	if vals["snmp.host.storage.used_units"] == nil {
+		t.Fatalf("expected generic non-interface indexed key")
+	}
+	if vals["snmp.host.storage.idx65536.used_units"] != nil {
+		t.Fatalf("did not expect flattened non-interface indexed key")
 	}
 }
 

@@ -217,13 +217,17 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 			return fmt.Errorf("unsupported ValueType %q", t.ValueType)
 		}
 
-		// Carry full canonical metadata as additional telemetry keys.
-		values[t.Metric+"__value_type"] = t.ValueType
-		if t.Tags != nil {
-			values[t.Metric+"__tags"] = t.Tags
+		metricKey := t.Metric
+		if flatKey, ok := thingsBoardFlattenedInterfaceKey(t); ok {
+			delete(values, t.Metric)
+			metricKey = flatKey
 		}
-		if flatKey, ok := thingsBoardFlattenedKey(t); ok {
-			values[flatKey] = baseValue
+		values[metricKey] = baseValue
+
+		// Carry full canonical metadata as additional telemetry keys.
+		values[metricKey+"__value_type"] = t.ValueType
+		if t.Tags != nil {
+			values[metricKey+"__tags"] = t.Tags
 		}
 
 		payload := map[string][]tbGatewayTelemetry{
@@ -251,7 +255,10 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	return nil
 }
 
-func thingsBoardFlattenedKey(t models.Telemetry) (string, bool) {
+func thingsBoardFlattenedInterfaceKey(t models.Telemetry) (string, bool) {
+	if !strings.HasPrefix(t.Metric, "snmp.if.") {
+		return "", false
+	}
 	if t.Tags == nil {
 		return "", false
 	}

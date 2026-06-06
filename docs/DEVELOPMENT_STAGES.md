@@ -1736,6 +1736,21 @@ Status update:
 Notes:
 - Flattened interface identities for ThingsBoard now use lowercase names, trim spaces, convert space/slash/dot/colon to `-`, drop unsupported characters, collapse repeated dashes, and fall back to `idx<ifIndex>` when empty.
 - This keeps per-interface telemetry keys stable and dashboard-friendly while preserving the original canonical metric plus tags in the same payload.
+
+2026-06-06 11:05
+Task: Restrict ThingsBoard flattened-only behavior to indexed interface metrics
+Changed files:
+- internal/adapters/thingsboard_mqtt_adapter.go
+- internal/adapters/thingsboard_mqtt_adapter_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/adapters
+Status update:
+- Phase 14H follow-up: interface-only flattened payload DONE
+Notes:
+- For `snmp.if.*` telemetry with `ifIndex`, ThingsBoard adapter now publishes only the flattened key plus flattened `__tags` and `__value_type`; the generic interface key is no longer emitted.
+- Non-indexed metrics keep the old generic format, and indexed non-interface metrics such as `snmp.host.storage.*` are intentionally unchanged.
 ```
 
 2026-06-05 13:20
