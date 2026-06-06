@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -166,6 +167,12 @@ type tbGatewayTelemetry struct {
 	Values map[string]any `json:"values"`
 }
 
+var (
+	tbKeySeparatorChars = regexp.MustCompile(`[\s/:.]+`)
+	tbInvalidKeyChars   = regexp.MustCompile(`[^a-z0-9-]+`)
+	tbRepeatedDashes    = regexp.MustCompile(`-+`)
+)
+
 func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.Telemetry) error {
 	if len(batch) == 0 {
 		return nil
@@ -192,17 +199,20 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		}
 
 		values := map[string]any{}
+		var baseValue any
 		switch t.ValueType {
 		case "number":
 			if t.ValueNumber == nil {
 				return errors.New("telemetry ValueNumber is nil")
 			}
-			values[t.Metric] = *t.ValueNumber
+			baseValue = *t.ValueNumber
+			values[t.Metric] = baseValue
 		case "string":
 			if t.ValueString == nil {
 				return errors.New("telemetry ValueString is nil")
 			}
-			values[t.Metric] = *t.ValueString
+			baseValue = *t.ValueString
+			values[t.Metric] = baseValue
 		default:
 			return fmt.Errorf("unsupported ValueType %q", t.ValueType)
 		}
@@ -211,6 +221,9 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		values[t.Metric+"__value_type"] = t.ValueType
 		if t.Tags != nil {
 			values[t.Metric+"__tags"] = t.Tags
+		}
+		if flatKey, ok := thingsBoardFlattenedKey(t); ok {
+			values[flatKey] = baseValue
 		}
 
 		payload := map[string][]tbGatewayTelemetry{
@@ -236,6 +249,42 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		a.obs.UpdateStatus("published", fmt.Sprintf("count=%d", len(batch)))
 	}
 	return nil
+}
+
+func thingsBoardFlattenedKey(t models.Telemetry) (string, bool) {
+	if t.Tags == nil {
+		return "", false
+	}
+	ifIndex := strings.TrimSpace(t.Tags["ifIndex"])
+	if ifIndex == "" {
+		return "", false
+	}
+	identity := strings.TrimSpace(t.Tags["ifName"])
+	if identity == "" {
+		identity = "idx" + ifIndex
+	}
+	identity = sanitizeThingsBoardKeyPart(identity)
+	if identity == "" {
+		identity = "idx" + sanitizeThingsBoardKeyPart(ifIndex)
+	}
+	parts := strings.Split(t.Metric, ".")
+	if len(parts) < 2 {
+		return "", false
+	}
+	flat := make([]string, 0, len(parts)+1)
+	flat = append(flat, parts[:2]...)
+	flat = append(flat, identity)
+	flat = append(flat, parts[2:]...)
+	return strings.Join(flat, "."), true
+}
+
+func sanitizeThingsBoardKeyPart(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = tbKeySeparatorChars.ReplaceAllString(s, "-")
+	s = tbInvalidKeyChars.ReplaceAllString(s, "")
+	s = tbRepeatedDashes.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
 }
 
 func (a *ThingsBoardMQTTAdapter) HealthCheck(ctx context.Context) error {

@@ -85,6 +85,137 @@ func TestThingsBoardMQTTAdapter_SendBatch_PayloadShape(t *testing.T) {
 	}
 }
 
+func TestThingsBoardMQTTAdapter_SendBatch_AddsFlattenedInterfaceKeyUsingIfName(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fcli := &fakeTBMQTTClient{connected: true, open: true, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+
+	val := 13472.05
+	batch := []models.Telemetry{{
+		DeviceID:    "router-1",
+		Metric:      "snmp.if.rx_bps",
+		TS:          time.Unix(10, 0).UTC(),
+		ValueType:   "number",
+		ValueNumber: &val,
+		Tags:        map[string]string{"ifIndex": "8", "ifName": "Gi0/1", "source": "snmp", "unit": "bps"},
+	}}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	b := fcli.publishes[0].payload.([]byte)
+	var m map[string][]map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	vals := m["router-1"][0]["values"].(map[string]any)
+	if vals["snmp.if.gi0-1.rx_bps"] == nil {
+		t.Fatalf("expected flattened ifName key")
+	}
+	if vals["snmp.if.rx_bps"] == nil {
+		t.Fatalf("expected canonical key")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_SendBatch_SanitizesInterfaceNameToDashedLowercase(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fcli := &fakeTBMQTTClient{connected: true, open: true, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+
+	val := 1.0
+	batch := []models.Telemetry{{
+		DeviceID:    "router-1",
+		Metric:      "snmp.if.oper_status",
+		TS:          time.Unix(10, 0).UTC(),
+		ValueType:   "number",
+		ValueNumber: &val,
+		Tags:        map[string]string{"ifIndex": "8", "ifName": " WAN / ISP:1.core ", "source": "snmp"},
+	}}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	b := fcli.publishes[0].payload.([]byte)
+	var m map[string][]map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	vals := m["router-1"][0]["values"].(map[string]any)
+	if vals["snmp.if.wan-isp-1-core.oper_status"] == nil {
+		t.Fatalf("expected sanitized flattened ifName key")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_SendBatch_AddsFlattenedInterfaceKeyUsingIfIndexFallback(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fcli := &fakeTBMQTTClient{connected: true, open: true, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+
+	val := 1.0
+	batch := []models.Telemetry{{
+		DeviceID:    "router-1",
+		Metric:      "snmp.if.oper_status",
+		TS:          time.Unix(10, 0).UTC(),
+		ValueType:   "number",
+		ValueNumber: &val,
+		Tags:        map[string]string{"ifIndex": "9", "source": "snmp"},
+	}}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	b := fcli.publishes[0].payload.([]byte)
+	var m map[string][]map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	vals := m["router-1"][0]["values"].(map[string]any)
+	if vals["snmp.if.idx9.oper_status"] == nil {
+		t.Fatalf("expected flattened ifIndex fallback key")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_SendBatch_FallsBackToIfIndexWhenSanitizedNameEmpty(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fcli := &fakeTBMQTTClient{connected: true, open: true, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+
+	val := 100.0
+	batch := []models.Telemetry{{
+		DeviceID:    "router-1",
+		Metric:      "snmp.if.tx_bps",
+		TS:          time.Unix(10, 0).UTC(),
+		ValueType:   "number",
+		ValueNumber: &val,
+		Tags:        map[string]string{"ifIndex": "8", "ifName": "@@@###", "source": "snmp"},
+	}}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	b := fcli.publishes[0].payload.([]byte)
+	var m map[string][]map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	vals := m["router-1"][0]["values"].(map[string]any)
+	if vals["snmp.if.idx8.tx_bps"] == nil {
+		t.Fatalf("expected ifIndex fallback when sanitized name becomes empty")
+	}
+}
+
 func TestThingsBoardMQTTAdapter_SendBatch_PublishError(t *testing.T) {
 	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
 	if err != nil {

@@ -1705,6 +1705,37 @@ Notes:
 - `view --mode summary` now renders a per-device table with status, last seen, latency, loss, and alert counts.
 - On interactive terminals, summary updates redraw in place instead of printing a new summary block every batch.
 - Live summary still updates from aggregated telemetry state, so newly discovered devices and up/down changes appear automatically.
+
+2026-06-06 10:20
+Task: Improve ThingsBoard indexed metric usability with flattened interface keys
+Changed files:
+- internal/adapters/thingsboard_mqtt_adapter.go
+- internal/adapters/thingsboard_mqtt_adapter_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/adapters
+Status update:
+- Phase 14H: ThingsBoard indexed key flattening DONE
+Notes:
+- ThingsBoard adapter now emits additional flattened keys for telemetry with `ifIndex` tags, using `ifName` when available and falling back to `idx<ifIndex>`.
+- Canonical metric key and `__tags` metadata are still published unchanged, so core contract remains platform-agnostic and backward compatible.
+- This makes interface-scoped widgets in ThingsBoard easier to build without relying on tag-map inspection.
+
+2026-06-06 10:40
+Task: Align ThingsBoard flattened interface key sanitization
+Changed files:
+- internal/adapters/thingsboard_mqtt_adapter.go
+- internal/adapters/thingsboard_mqtt_adapter_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/adapters
+Status update:
+- Phase 14H follow-up: flattened key sanitization DONE
+Notes:
+- Flattened interface identities for ThingsBoard now use lowercase names, trim spaces, convert space/slash/dot/colon to `-`, drop unsupported characters, collapse repeated dashes, and fall back to `idx<ifIndex>` when empty.
+- This keeps per-interface telemetry keys stable and dashboard-friendly while preserving the original canonical metric plus tags in the same payload.
 ```
 
 2026-06-05 13:20
