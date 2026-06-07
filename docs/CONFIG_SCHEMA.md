@@ -169,11 +169,16 @@ adapters:
     strict_queue_mode: true
 ```
 
-- `thingsboard_mqtt`: publish canonical telemetry to ThingsBoard via Gateway MQTT API.
+- `thingsboard_mqtt`: publish ThingsBoard-shaped telemetry either directly to ThingsBoard Gateway MQTT API or indirectly via broker for ThingsBoard Gateway connector ingestion.
   Required configs:
   - `broker`: broker URL (e.g. `tcp://thingsboard.local:1883`).
-  - `access_token`: ThingsBoard gateway device access token.
   Optional configs:
+  - `mode`: `direct` or `gateway` (default `direct`).
+    - `direct`: MQTT auth uses ThingsBoard gateway `access_token`, default topic `v1/gateway/telemetry`.
+    - `gateway`: publish to a regular broker/topic for ThingsBoard Gateway connector consumption, default topic `nms-agent/thingsboard/telemetry`.
+  - `access_token`: ThingsBoard gateway device access token (required in `direct` mode).
+  - `username`: broker username for `gateway` mode if broker auth is enabled.
+  - `password`: broker password for `gateway` mode if broker auth is enabled.
   - `topic`: telemetry topic (default `v1/gateway/telemetry`).
   - `client_id`: MQTT client ID.
   - `qos`: `0|1|2` (default `1`).
@@ -183,7 +188,9 @@ adapters:
   - `connect_timeout`: Go duration (default `5s`).
   - `publish_timeout`: Go duration (default `5s`).
   Notes:
+  - Adapter publishes payload grouped by device and timestamp in ThingsBoard-style `{"device":[{"ts":...,"values":{...}}]}` format.
   - Adapter will publish metric value plus metadata keys: `<metric>__value_type` and `<metric>__tags` (includes threshold tags like `threshold.status`).
+  - In `gateway` mode this payload is intended to be consumed by a ThingsBoard Gateway MQTT connector with a thin/pass-through custom converter.
 
 Example:
 
@@ -193,6 +200,18 @@ adapters:
   configs:
     broker: tcp://127.0.0.1:1883
     access_token: YOUR_GATEWAY_TOKEN
+    strict_queue_mode: true
+```
+
+Gateway mode example:
+
+```yaml
+adapters:
+  active: thingsboard_mqtt
+  configs:
+    broker: tcp://127.0.0.1:1883
+    mode: gateway
+    topic: nms-agent/thingsboard/telemetry
     strict_queue_mode: true
 ```
 

@@ -41,6 +41,19 @@ func TestParseThingsBoardMQTTConfig_RequiresBrokerAndToken(t *testing.T) {
 	}
 }
 
+func TestParseThingsBoardMQTTConfig_GatewayModeDoesNotRequireAccessToken(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "mode": "gateway"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Mode != "gateway" {
+		t.Fatalf("expected gateway mode, got %q", c.Mode)
+	}
+	if c.Topic != "nms-agent/thingsboard/telemetry" {
+		t.Fatalf("unexpected gateway topic %q", c.Topic)
+	}
+}
+
 func TestThingsBoardMQTTAdapter_SendBatch_PayloadShape(t *testing.T) {
 	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
 	if err != nil {
@@ -82,6 +95,69 @@ func TestThingsBoardMQTTAdapter_SendBatch_PayloadShape(t *testing.T) {
 	}
 	if vals["icmp.latency_ms__tags"] == nil {
 		t.Fatalf("expected tags key")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_SendBatch_AggregatesMetricsByDeviceAndTimestamp(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fcli := &fakeTBMQTTClient{connected: true, open: true, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+	ts := time.Unix(10, 0).UTC()
+	v1 := 1.0
+	v2 := 12.3
+	s := "router-a"
+	batch := []models.Telemetry{
+		{DeviceID: "d1", Metric: "icmp.reachable", TS: ts, ValueType: "number", ValueNumber: &v1, Tags: map[string]string{"source": "icmp"}},
+		{DeviceID: "d1", Metric: "icmp.latency_ms", TS: ts, ValueType: "number", ValueNumber: &v2, Tags: map[string]string{"source": "icmp", "unit": "ms"}},
+		{DeviceID: "d1", Metric: "snmp.system.name", TS: ts, ValueType: "string", ValueString: &s, Tags: map[string]string{"source": "snmp"}},
+	}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fcli.publishes) != 1 {
+		t.Fatalf("expected single publish, got %d", len(fcli.publishes))
+	}
+	b := fcli.publishes[0].payload.([]byte)
+	var m map[string][]map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	arr := m["d1"]
+	if len(arr) != 1 {
+		t.Fatalf("expected 1 aggregated entry, got %d", len(arr))
+	}
+	vals := arr[0]["values"].(map[string]any)
+	if vals["icmp.reachable"] == nil || vals["icmp.latency_ms"] == nil || vals["snmp.system.name"] == nil {
+		t.Fatalf("expected aggregated values, got %+v", vals)
+	}
+}
+
+func TestThingsBoardMQTTAdapter_SendBatch_GroupsDifferentTimestampsSeparately(t *testing.T) {
+	c, err := parseThingsBoardMQTTConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fcli := &fakeTBMQTTClient{connected: true, open: true, connectToken: newFakeToken(nil, true), publishToken: newFakeToken(nil, true)}
+	a := &ThingsBoardMQTTAdapter{cfg: c, client: fcli}
+	v1 := 1.0
+	v2 := 2.0
+	batch := []models.Telemetry{
+		{DeviceID: "d1", Metric: "icmp.reachable", TS: time.Unix(10, 0).UTC(), ValueType: "number", ValueNumber: &v1},
+		{DeviceID: "d1", Metric: "icmp.packet_loss_pct", TS: time.Unix(11, 0).UTC(), ValueType: "number", ValueNumber: &v2},
+	}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	b := fcli.publishes[0].payload.([]byte)
+	var m map[string][]map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if len(m["d1"]) != 2 {
+		t.Fatalf("expected 2 timestamp groups, got %d", len(m["d1"]))
 	}
 }
 

@@ -1766,6 +1766,24 @@ Status update:
 Notes:
 - `snmp.host.storage.*` telemetry with `ifIndex` now uses flattened-only ThingsBoard keys like `snmp.host.storage.idx65536.used_units`, with matching flattened `__tags` and `__value_type` keys.
 - Interface flattening behavior remains unchanged, while other indexed metrics outside `snmp.if.*` and `snmp.host.storage.*` still use the generic payload shape.
+
+2026-06-07 10:55
+Task: Add ThingsBoard MQTT gateway mode and grouped payload publishing
+Changed files:
+- internal/adapters/thingsboard_mqtt_adapter.go
+- internal/adapters/thingsboard_mqtt_adapter_test.go
+- docs/CONFIG_SCHEMA.md
+- configs/examples/hq-adapters.yml
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/adapters
+Status update:
+- Phase 14I: ThingsBoard direct/gateway dual-mode DONE
+Notes:
+- `thingsboard_mqtt` now supports `mode: direct|gateway`. Direct mode keeps token auth for `v1/gateway/telemetry`; gateway mode publishes the same ThingsBoard-shaped payload to a regular broker/topic for ThingsBoard Gateway connector ingestion.
+- Payload publishing is now grouped by `device + timestamp`, so a single MQTT message can carry multiple metrics in one `values` map instead of one publish per metric.
+- This keeps `generic_mqtt` platform-agnostic while making `thingsboard_mqtt` usable both for direct ingestion and for broker-first gateway topologies.
 ```
 
 2026-06-05 13:20

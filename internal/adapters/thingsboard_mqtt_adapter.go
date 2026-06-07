@@ -16,8 +16,11 @@ import (
 
 type thingsboardMQTTConfig struct {
 	BrokerURL      string
+	Mode           string
 	Topic          string
 	AccessToken    string
+	Username       string
+	Password       string
 	ClientID       string
 	QoS            byte
 	Retain         bool
@@ -29,7 +32,7 @@ type thingsboardMQTTConfig struct {
 
 func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, error) {
 	c := thingsboardMQTTConfig{
-		Topic:          "v1/gateway/telemetry",
+		Mode:           "direct",
 		QoS:            1,
 		Retain:         false,
 		AutoReconnect:  true,
@@ -44,6 +47,9 @@ func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, erro
 	if v, ok := cfg["broker"].(string); ok {
 		c.BrokerURL = strings.TrimSpace(v)
 	}
+	if v, ok := cfg["mode"].(string); ok {
+		c.Mode = strings.TrimSpace(strings.ToLower(v))
+	}
 	if v, ok := cfg["topic"].(string); ok {
 		v = strings.TrimSpace(v)
 		if v != "" {
@@ -52,6 +58,12 @@ func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, erro
 	}
 	if v, ok := cfg["access_token"].(string); ok {
 		c.AccessToken = strings.TrimSpace(v)
+	}
+	if v, ok := cfg["username"].(string); ok {
+		c.Username = strings.TrimSpace(v)
+	}
+	if v, ok := cfg["password"].(string); ok {
+		c.Password = v
 	}
 	if v, ok := cfg["client_id"].(string); ok {
 		c.ClientID = strings.TrimSpace(v)
@@ -101,8 +113,21 @@ func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, erro
 	if c.BrokerURL == "" {
 		return c, errors.New("thingsboard_mqtt requires config key 'broker'")
 	}
-	if c.AccessToken == "" {
-		return c, errors.New("thingsboard_mqtt requires config key 'access_token'")
+	switch c.Mode {
+	case "", "direct":
+		c.Mode = "direct"
+		if c.Topic == "" {
+			c.Topic = "v1/gateway/telemetry"
+		}
+		if c.AccessToken == "" {
+			return c, errors.New("thingsboard_mqtt requires config key 'access_token'")
+		}
+	case "gateway":
+		if c.Topic == "" {
+			c.Topic = "nms-agent/thingsboard/telemetry"
+		}
+	default:
+		return c, errors.New("thingsboard_mqtt requires config key 'mode' to be 'direct' or 'gateway'")
 	}
 	if !strings.Contains(c.BrokerURL, "://") {
 		c.BrokerURL = "tcp://" + c.BrokerURL
@@ -133,9 +158,14 @@ func NewThingsBoardMQTTAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, err
 	if c.ClientID != "" {
 		opts.SetClientID(c.ClientID)
 	}
-	// ThingsBoard MQTT auth: username = access token.
-	opts.SetUsername(c.AccessToken)
-	opts.SetPassword("")
+	if c.Mode == "direct" {
+		// ThingsBoard MQTT auth: username = access token.
+		opts.SetUsername(c.AccessToken)
+		opts.SetPassword("")
+	} else if c.Username != "" {
+		opts.SetUsername(c.Username)
+		opts.SetPassword(c.Password)
+	}
 	opts.SetConnectTimeout(c.ConnectTimeout)
 	opts.SetAutoReconnect(c.AutoReconnect)
 	opts.SetCleanSession(true)
@@ -190,69 +220,93 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		return errors.New("mqtt not connected")
 	}
 
-	for _, t := range batch {
-		if strings.TrimSpace(t.DeviceID) == "" {
-			return errors.New("telemetry DeviceID is required")
-		}
-		if strings.TrimSpace(t.Metric) == "" {
-			return errors.New("telemetry Metric is required")
-		}
-
-		values := map[string]any{}
-		var baseValue any
-		switch t.ValueType {
-		case "number":
-			if t.ValueNumber == nil {
-				return errors.New("telemetry ValueNumber is nil")
-			}
-			baseValue = *t.ValueNumber
-			values[t.Metric] = baseValue
-		case "string":
-			if t.ValueString == nil {
-				return errors.New("telemetry ValueString is nil")
-			}
-			baseValue = *t.ValueString
-			values[t.Metric] = baseValue
-		default:
-			return fmt.Errorf("unsupported ValueType %q", t.ValueType)
-		}
-
-		metricKey := t.Metric
-		if flatKey, ok := thingsBoardFlattenedIndexedKey(t); ok {
-			delete(values, t.Metric)
-			metricKey = flatKey
-		}
-		values[metricKey] = baseValue
-
-		// Carry full canonical metadata as additional telemetry keys.
-		values[metricKey+"__value_type"] = t.ValueType
-		if t.Tags != nil {
-			values[metricKey+"__tags"] = t.Tags
-		}
-
-		payload := map[string][]tbGatewayTelemetry{
-			t.DeviceID: {{TS: t.TS.UnixMilli(), Values: values}},
-		}
-		b, err := json.Marshal(payload)
-		if err != nil {
-			return fmt.Errorf("marshal thingsboard payload: %w", err)
-		}
-		if a.cfg.StrictQueue && !(a.client.IsConnected() && a.client.IsConnectionOpen()) {
-			return errors.New("mqtt not connected")
-		}
-		tok := a.client.Publish(a.cfg.Topic, a.cfg.QoS, a.cfg.Retain, b)
-		if !tok.WaitTimeout(a.cfg.PublishTimeout) {
-			return errors.New("mqtt publish timeout")
-		}
-		if err := tok.Error(); err != nil {
-			return fmt.Errorf("mqtt publish: %w", err)
-		}
+	payload, err := buildThingsBoardPayload(batch)
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal thingsboard payload: %w", err)
+	}
+	if a.cfg.StrictQueue && !(a.client.IsConnected() && a.client.IsConnectionOpen()) {
+		return errors.New("mqtt not connected")
+	}
+	tok := a.client.Publish(a.cfg.Topic, a.cfg.QoS, a.cfg.Retain, b)
+	if !tok.WaitTimeout(a.cfg.PublishTimeout) {
+		return errors.New("mqtt publish timeout")
+	}
+	if err := tok.Error(); err != nil {
+		return fmt.Errorf("mqtt publish: %w", err)
 	}
 	if a.obs != nil {
 		a.obs.Update(batch)
 		a.obs.UpdateStatus("published", fmt.Sprintf("count=%d", len(batch)))
 	}
 	return nil
+}
+
+func buildThingsBoardPayload(batch []models.Telemetry) (map[string][]tbGatewayTelemetry, error) {
+	byDevice := make(map[string]map[int64]map[string]any)
+	orderedTS := make(map[string][]int64)
+	for _, t := range batch {
+		if strings.TrimSpace(t.DeviceID) == "" {
+			return nil, errors.New("telemetry DeviceID is required")
+		}
+		if strings.TrimSpace(t.Metric) == "" {
+			return nil, errors.New("telemetry Metric is required")
+		}
+		baseValue, err := telemetryBaseValue(t)
+		if err != nil {
+			return nil, err
+		}
+		metricKey := t.Metric
+		if flatKey, ok := thingsBoardFlattenedIndexedKey(t); ok {
+			metricKey = flatKey
+		}
+		ts := t.TS.UnixMilli()
+		perTS := byDevice[t.DeviceID]
+		if perTS == nil {
+			perTS = make(map[int64]map[string]any)
+			byDevice[t.DeviceID] = perTS
+		}
+		values := perTS[ts]
+		if values == nil {
+			values = make(map[string]any)
+			perTS[ts] = values
+			orderedTS[t.DeviceID] = append(orderedTS[t.DeviceID], ts)
+		}
+		values[metricKey] = baseValue
+		values[metricKey+"__value_type"] = t.ValueType
+		if t.Tags != nil {
+			values[metricKey+"__tags"] = t.Tags
+		}
+	}
+	out := make(map[string][]tbGatewayTelemetry, len(byDevice))
+	for deviceID, perTS := range byDevice {
+		entries := make([]tbGatewayTelemetry, 0, len(perTS))
+		for _, ts := range orderedTS[deviceID] {
+			entries = append(entries, tbGatewayTelemetry{TS: ts, Values: perTS[ts]})
+		}
+		out[deviceID] = entries
+	}
+	return out, nil
+}
+
+func telemetryBaseValue(t models.Telemetry) (any, error) {
+	switch t.ValueType {
+	case "number":
+		if t.ValueNumber == nil {
+			return nil, errors.New("telemetry ValueNumber is nil")
+		}
+		return *t.ValueNumber, nil
+	case "string":
+		if t.ValueString == nil {
+			return nil, errors.New("telemetry ValueString is nil")
+		}
+		return *t.ValueString, nil
+	default:
+		return nil, fmt.Errorf("unsupported ValueType %q", t.ValueType)
+	}
 }
 
 func thingsBoardFlattenedIndexedKey(t models.Telemetry) (string, bool) {

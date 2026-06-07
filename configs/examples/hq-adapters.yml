@@ -1,9 +1,11 @@
-# HQ Site — ThingsBoard MQTT Adapter
-# Use this config on the gateway at the main office.
+# HQ Site — ThingsBoard MQTT Adapter (Gateway Mode)
+# Publish ThingsBoard-shaped telemetry to a local broker for
+# ThingsBoard Gateway MQTT connector consumption.
 
 adapters:
   active: thingsboard_mqtt
   configs:
     broker: tcp://127.0.0.1:1883
-    access_token: YOUR_THINGSBOARD_GATEWAY_TOKEN
+    mode: gateway
+    topic: nms-agent/thingsboard/telemetry
     strict_queue_mode: true
