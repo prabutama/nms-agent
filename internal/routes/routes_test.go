@@ -166,6 +166,23 @@ func TestNormalizerEmitsCorrectRouteKeysAndValueTypes(t *testing.T) {
 	assertMetric("route.ipv4.default.next_hop", "string")
 }
 
+func TestSummarizeSnapshotDoesNotDoubleCountExistingValues(t *testing.T) {
+	snapshot := RouteSnapshot{
+		RouteCount:          99,
+		DefaultRouteCount:   99,
+		ConnectedRouteCount: 99,
+		RemoteRouteCount:    99,
+		Routes: []RouteEntry{
+			{Destination: "0.0.0.0/0", IsDefault: true, RouteType: "remote"},
+			{Destination: "172.16.20.0/24", RouteType: "connected"},
+		},
+	}
+	snapshot = summarizeSnapshot(snapshot)
+	if snapshot.RouteCount != 2 || snapshot.DefaultRouteCount != 1 || snapshot.ConnectedRouteCount != 1 || snapshot.RemoteRouteCount != 1 {
+		t.Fatalf("unexpected counts %+v", snapshot)
+	}
+}
+
 type stubProvider struct{ snapshot RouteSnapshot }
 
 func (s stubProvider) Collect(ctx context.Context, deviceID, address string) (RouteSnapshot, error) {

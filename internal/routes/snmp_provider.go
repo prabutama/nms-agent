@@ -300,6 +300,10 @@ func pduInt(pdu g.SnmpPDU) (int, bool) {
 }
 
 func summarizeSnapshot(snapshot RouteSnapshot) RouteSnapshot {
+	snapshot.RouteCount = 0
+	snapshot.DefaultRouteCount = 0
+	snapshot.ConnectedRouteCount = 0
+	snapshot.RemoteRouteCount = 0
 	snapshot.RouteCount = len(snapshot.Routes)
 	for _, route := range snapshot.Routes {
 		if route.IsDefault {
