@@ -18,3 +18,5 @@
   - core services handle validation, preprocessing, and normalization;
   - queue manages local durability and retry state;
   - adapters translate and send telemetry to target platforms.
+
+- Route inventory follows the same canonical flow. Core emits only canonical route records; any split of route summary vs route attributes/snapshots must happen in adapters or external gateway converters, not in route collectors or core services.

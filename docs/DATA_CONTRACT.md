@@ -65,6 +65,30 @@ Indexed (tag `ifIndex` is the hrStorage index):
 - snmp.host.storage.size_units
 - snmp.host.storage.used_units
 
+## Route Inventory Metrics (Phase 14)
+
+Summary metrics:
+
+- route.ipv4.supported
+- route.ipv4.route_count
+- route.ipv4.default_route_count
+- route.ipv4.connected_route_count
+- route.ipv4.remote_route_count
+- route.ipv4.changed
+
+Detail/default-route/snapshot records remain canonical string-valued records:
+
+- route.ipv4.default.destination
+- route.ipv4.default.next_hop
+- route.ipv4.default.interface_id
+- route.ipv4.default.interface_name
+- route.ipv4.default.protocol
+- route.ipv4.default.route_type
+- route.ipv4.source
+- route.ipv4.snapshot
+
+Route inventory is built-in for SNMP-enabled devices. Unsupported route tables must emit `route.ipv4.supported=0` without failing the main polling cycle.
+
 ## Physical Interface Filtering
 
 Classifier global (semua device) menggunakan multi-signal:

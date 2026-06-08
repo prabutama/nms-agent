@@ -197,6 +197,8 @@ type tbGatewayTelemetry struct {
 	Values map[string]any `json:"values"`
 }
 
+const tbGatewayAttributesTopic = "v1/gateway/attributes"
+
 var (
 	tbKeySeparatorChars = regexp.MustCompile(`[\s/:.]+`)
 	tbInvalidKeyChars   = regexp.MustCompile(`[^a-z0-9-]+`)
@@ -220,11 +222,11 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		return errors.New("mqtt not connected")
 	}
 
-	payload, err := buildThingsBoardPayload(batch)
+	telemetryPayload, attrPayload, err := buildThingsBoardPayloads(a.cfg.Mode, batch)
 	if err != nil {
 		return err
 	}
-	b, err := json.Marshal(payload)
+	b, err := json.Marshal(telemetryPayload)
 	if err != nil {
 		return fmt.Errorf("marshal thingsboard payload: %w", err)
 	}
@@ -238,6 +240,19 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	if err := tok.Error(); err != nil {
 		return fmt.Errorf("mqtt publish: %w", err)
 	}
+	if len(attrPayload) > 0 {
+		attrBytes, err := json.Marshal(attrPayload)
+		if err != nil {
+			return fmt.Errorf("marshal thingsboard attributes payload: %w", err)
+		}
+		attrTok := a.client.Publish(tbGatewayAttributesTopic, a.cfg.QoS, a.cfg.Retain, attrBytes)
+		if !attrTok.WaitTimeout(a.cfg.PublishTimeout) {
+			return errors.New("mqtt publish timeout")
+		}
+		if err := attrTok.Error(); err != nil {
+			return fmt.Errorf("mqtt publish attributes: %w", err)
+		}
+	}
 	if a.obs != nil {
 		a.obs.Update(batch)
 		a.obs.UpdateStatus("published", fmt.Sprintf("count=%d", len(batch)))
@@ -245,23 +260,37 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	return nil
 }
 
-func buildThingsBoardPayload(batch []models.Telemetry) (map[string][]tbGatewayTelemetry, error) {
+func buildThingsBoardPayloads(mode string, batch []models.Telemetry) (map[string][]tbGatewayTelemetry, map[string]map[string]any, error) {
 	byDevice := make(map[string]map[int64]map[string]any)
 	orderedTS := make(map[string][]int64)
+	attrs := make(map[string]map[string]any)
 	for _, t := range batch {
 		if strings.TrimSpace(t.DeviceID) == "" {
-			return nil, errors.New("telemetry DeviceID is required")
+			return nil, nil, errors.New("telemetry DeviceID is required")
 		}
 		if strings.TrimSpace(t.Metric) == "" {
-			return nil, errors.New("telemetry Metric is required")
+			return nil, nil, errors.New("telemetry Metric is required")
 		}
 		baseValue, err := telemetryBaseValue(t)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		metricKey := t.Metric
 		if flatKey, ok := thingsBoardFlattenedIndexedKey(t); ok {
 			metricKey = flatKey
+		}
+		if mode == "direct" && isRouteAttributeMetric(t) {
+			deviceAttrs := attrs[t.DeviceID]
+			if deviceAttrs == nil {
+				deviceAttrs = make(map[string]any)
+				attrs[t.DeviceID] = deviceAttrs
+			}
+			deviceAttrs[metricKey] = baseValue
+			deviceAttrs[metricKey+"__value_type"] = t.ValueType
+			if t.Tags != nil {
+				deviceAttrs[metricKey+"__tags"] = t.Tags
+			}
+			continue
 		}
 		ts := t.TS.UnixMilli()
 		perTS := byDevice[t.DeviceID]
@@ -289,7 +318,11 @@ func buildThingsBoardPayload(batch []models.Telemetry) (map[string][]tbGatewayTe
 		}
 		out[deviceID] = entries
 	}
-	return out, nil
+	return out, attrs, nil
+}
+
+func isRouteAttributeMetric(t models.Telemetry) bool {
+	return t.ValueType == "string" && strings.HasPrefix(t.Metric, "route.ipv4.")
 }
 
 func telemetryBaseValue(t models.Telemetry) (any, error) {

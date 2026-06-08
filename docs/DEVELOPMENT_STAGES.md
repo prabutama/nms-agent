@@ -1784,6 +1784,37 @@ Notes:
 - `thingsboard_mqtt` now supports `mode: direct|gateway`. Direct mode keeps token auth for `v1/gateway/telemetry`; gateway mode publishes the same ThingsBoard-shaped payload to a regular broker/topic for ThingsBoard Gateway connector ingestion.
 - Payload publishing is now grouped by `device + timestamp`, so a single MQTT message can carry multiple metrics in one `values` map instead of one publish per metric.
 - This keeps `generic_mqtt` platform-agnostic while making `thingsboard_mqtt` usable both for direct ingestion and for broker-first gateway topologies.
+
+2026-06-08 13:30
+Task: Add built-in SNMP route inventory canonical flow
+Changed files:
+- cmd/nms-agent/main.go
+- internal/routes/model.go
+- internal/routes/provider.go
+- internal/routes/snmp_provider.go
+- internal/routes/resolver.go
+- internal/routes/fingerprint.go
+- internal/routes/normalizer.go
+- internal/routes/collector.go
+- internal/routes/routes_test.go
+- internal/adapters/thingsboard_mqtt_adapter.go
+- internal/adapters/thingsboard_mqtt_route_test.go
+- docs/DATA_CONTRACT.md
+- docs/ARCHITECTURE.md
+- docs/ADAPTER_CONTRACT.md
+- docs/CONFIG_SCHEMA.md
+- docs/ROUTE_INVENTORY.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/routes ./internal/adapters ./cmd/nms-agent
+- go test ./...
+Status update:
+- Phase 14J: built-in route inventory MVP DONE
+Notes:
+- Route inventory is now built-in for every SNMP-enabled device with primary `ipCidrRouteTable`, legacy `ipRouteTable` fallback, and non-fatal best-effort `inetCidrRouteTable` placeholder.
+- Core still emits single canonical records only; Generic MQTT remains unchanged, ThingsBoard gateway mode keeps projection in the external converter, and ThingsBoard direct mode may split route string records into attributes.
+- Route snapshots include stable fingerprints and `ifIndex=0` next-hop resolution to connected interfaces, preparing data for future logical topology without adding a new queue contract.
 ```
 
 2026-06-05 13:20

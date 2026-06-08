@@ -22,6 +22,7 @@ import (
 	"nms-agent/internal/processors"
 	"nms-agent/internal/profiles"
 	"nms-agent/internal/queue"
+	"nms-agent/internal/routes"
 	"nms-agent/internal/viewer"
 )
 
@@ -369,6 +370,7 @@ func buildCollector(mode string, loaded config.Loaded) (collectors.Collector, er
 	}
 	if len(snmpTargets) > 0 {
 		colList = append(colList, collectors.SNMPCollector{Targets: snmpTargets})
+		colList = append(colList, routes.Collector{Targets: snmpTargets, Cache: routes.NewChangeCache()})
 	}
 	return combinedCollector{collectors: colList}, nil
 }

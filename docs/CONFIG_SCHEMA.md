@@ -112,6 +112,7 @@ Notes:
 - `id` must be unique.
 - `address` is a host/IP string (protocol-specific validation is deferred).
 - `icmp.enabled` and `snmp.enabled` toggle which real collectors are used in `--collector-mode auto|real`.
+- Route inventory MVP does not require extra config in `agent.yml`. Every SNMP-enabled device is automatically probed for IPv4 routes using `ipCidrRouteTable` as primary source, `ipRouteTable` as fallback, and `inetCidrRouteTable` as best-effort optional source.
 
 ## configs/thresholds.yml
 

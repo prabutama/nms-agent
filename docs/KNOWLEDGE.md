@@ -48,7 +48,8 @@
 | `internal/adapters/factory_test.go` | Unit test factory adapter: pastikan adapter yang didukung bisa dibuat (TUI headless) dan unknown name mengembalikan error.                     |
 | `internal/adapters/output_timezone.go` | Konfigurasi global timezone untuk output adapter (terminal/TUI/MQTT) berdasarkan `agent.output.timezone`.                                      |
 | `internal/adapters/mqtt_generic_adapter.go` | Generic MQTT adapter Phase 8: publish canonical telemetry JSON ke broker MQTT (config: broker/topic/qos/retain/auth/timeout + `strict_queue_mode`). |
-| `internal/adapters/thingsboard_mqtt_adapter.go` | ThingsBoard MQTT adapter Phase 8: mendukung mode `direct` (Gateway API token auth) dan `gateway` (publish ke broker untuk ThingsBoard Gateway connector), mengagregasi payload per device+timestamp, dan merapikan key `snmp.if.*`/`snmp.host.storage.*` menjadi flattened keys untuk konsumsi ThingsBoard. |
+| `internal/adapters/thingsboard_mqtt_adapter.go` | ThingsBoard MQTT adapter Phase 8: mendukung mode `direct` (Gateway API token auth) dan `gateway` (publish ke broker untuk ThingsBoard Gateway connector), mengagregasi payload per device+timestamp, merapikan key `snmp.if.*`/`snmp.host.storage.*`, dan di direct mode dapat memproyeksikan route string records ke attributes. |
+| `internal/adapters/thingsboard_mqtt_route_test.go` | Unit test projection route inventory di ThingsBoard direct mode: route summary tetap telemetry sementara route string detail dipublish sebagai attributes. |
 | `internal/adapters/tui_adapter.go` | Adapter TUI: parsing config, start Bubble Tea program, `SendBatch()` inject telemetry via `Program.Send()`, `Close()` quit.                      |
 | `internal/adapters/tui_model.go` | Model TUI: state per-device/per-interface, simpan health ICMP (reachable/latency/jitter/loss), dedup alerts, filter `snmp.if.*`, memory ala `free` (UCD) dengan fallback hrStorage. |
 | `internal/adapters/tui_view.go` | View/layout TUI: 2-pane (device list + detail), truncation/MaxWidth anti-overlap, render Health (reachable/latency/jitter/loss), resources+Mem/Swap ala `free`. |
@@ -82,7 +83,8 @@
 | `docs/CLI_COMMANDS.md`         | Contoh command CLI `nms-agentctl` untuk validate, device list, queue status/retry, adapter health, threshold list/set.                            |
 | `docs/DATA_CONTRACT.md`        | Kontrak canonical telemetry (field wajib, tags threshold, derived metrics, normalization, termasuk hrStorage dan optional UCD memory/swap breakdown). |
 | `docs/CONFIG_SCHEMA.md`        | Dokumentasi schema config YAML (agent.yml/adapters.yml/devices/thresholds/discovery) dan opsi adapter/discovery.           |
-| `docs/ADAPTER_CONTRACT.md`     | Kontrak adapter: aturan boundary adapter terhadap queue dan canonical telemetry, daftar adapter MVP.                                                |
+| `docs/ADAPTER_CONTRACT.md`     | Kontrak adapter: aturan boundary adapter terhadap queue dan canonical telemetry, termasuk projection canonical string records ke attribute channel platform bila diperlukan.                                                |
+| `docs/ROUTE_INVENTORY.md`      | Dokumen perilaku route inventory built-in: urutan provider, canonical outputs, resolusi interface, dan persiapan data untuk topology builder. |
 | `docs/DEVELOPMENT_STAGES.md`   | Checklist phase/stage pengembangan + development log + catatan validasi per task.                                                                  |
 | `packaging/systemd/nms-agent.service` | Unit file systemd untuk menjalankan `nms-agent` sebagai service, termasuk `ExecReload` (SIGHUP).                                               |
 | `packaging/systemd/install.sh` | Script install systemd (build dari repo): setup user/dir, install config, install unit, enable+start service.                                       |
@@ -101,6 +103,14 @@
 | `internal/viewer/server.go`                  | Unix socket server untuk daemon: menerima koneksi viewer, kirim snapshot + stream live.                                                        |
 | `internal/viewer/client.go`                  | Unix socket client untuk `nms-agentctl view`: connect, baca snapshot, subscribe live.                                                          |
 | `internal/viewer/hub_test.go`                | Unit test merge snapshot viewer: multi-device merge, replace same key, different ifIndex.                                                          |
+| `internal/routes/model.go`                   | Model canonical route inventory (`RouteEntry`, `RouteSnapshot`) dan konstanta source table SNMP untuk future logical topology. |
+| `internal/routes/provider.go`                | Kontrak provider route inventory agar source pengambilan route tetap terpisah dari runtime collector dan platform adapter. |
+| `internal/routes/snmp_provider.go`           | Provider SNMP route inventory IPv4 dengan prioritas `ipCidrRouteTable`, fallback legacy `ipRouteTable`, best-effort `inetCidrRouteTable`, plus lookup nama interface IF-MIB. |
+| `internal/routes/resolver.go`                | Resolver route inventory: mapping protocol/type per source table, deteksi default route, urutan stabil, dan resolusi `ifIndex=0` via connected route. |
+| `internal/routes/fingerprint.go`             | Fingerprint route snapshot dan cache perubahan per device/address-family untuk menghasilkan flag `route.ipv4.changed`. |
+| `internal/routes/normalizer.go`              | Normalizer route snapshot menjadi canonical raw records summary/default-route/snapshot string tanpa menambah kontrak queue baru. |
+| `internal/routes/collector.go`               | Collector built-in route inventory untuk semua device SNMP-enabled; unsupported route tables tidak menggagalkan cycle utama. |
+| `internal/routes/routes_test.go`             | Unit test route inventory: parsing ipCidr/legacy, resolusi interface, fingerprint, snapshot limit, dan non-fatal unsupported behavior. |
 | `README.md`                      | Dokumentasi utama proyek: quick start, install, config reference, CLI commands, arsitektur, dan demo guide.                                   |
 | `docs/TROUBLESHOOTING.md`        | Panduan troubleshooting: config errors, collector errors, queue errors, adapter errors, reload errors, systemd issues, dan performance.    |
 | `docs/SECURITY.md`               | Panduan keamanan: credential handling, file permissions, network security, TLS, queue data, dan known security considerations.               |
