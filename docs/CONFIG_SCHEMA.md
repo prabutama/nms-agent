@@ -223,7 +223,7 @@ adapters:
     thingsboard:
       api:
         base_url: ${TB_URL}
-        api_key: ${TB_API_KEY_BR_B}
+        api_key: ${TB_API_KEY}
       site:
         key: branch-b
         asset_id: a75abc20-1839-11f1-a070-473c29007b79

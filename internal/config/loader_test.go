@@ -41,7 +41,7 @@ func TestLoadFromFile_ResolvesRelativePaths(t *testing.T) {
 
 func TestLoadFromFile_ExpandsAdapterEnvVars(t *testing.T) {
 	t.Setenv("TB_URL", "https://example.com")
-	t.Setenv("TB_API_KEY_BR_B", "secret-key")
+	t.Setenv("TB_API_KEY", "secret-key")
 	tmp := t.TempDir()
 	configsDir := filepath.Join(tmp, "configs")
 	devicesDir := filepath.Join(configsDir, "devices.d")
@@ -51,7 +51,7 @@ func TestLoadFromFile_ExpandsAdapterEnvVars(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(configsDir, "thresholds.yml"), []byte("thresholds: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	adaptersYML := []byte("adapters:\n  active: thingsboard_mqtt\n  configs:\n    broker: tcp://127.0.0.1:1883\n    thingsboard:\n      api:\n        base_url: ${TB_URL}\n        api_key: ${TB_API_KEY_BR_B}\n")
+	adaptersYML := []byte("adapters:\n  active: thingsboard_mqtt\n  configs:\n    broker: tcp://127.0.0.1:1883\n    thingsboard:\n      api:\n        base_url: ${TB_URL}\n        api_key: ${TB_API_KEY}\n")
 	if err := os.WriteFile(filepath.Join(configsDir, "adapters.yml"), adaptersYML, 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -1,12 +1,8 @@
-# Adapter runtime config is a later phase. This file exists so config loading/validation
-# has a stable path and can evolve without changing the loader contract.
+#adapters:
+#  active: tui
+#  configs: {}
 
-
-# adapters:
-#   active: tui
-#   configs: {}
-
-# adapters:
+#adapters:
 #   active: generic_mqtt
 #   configs:
 #     broker: tcp://127.0.0.1:1883
@@ -19,5 +15,15 @@ adapters:
   active: thingsboard_mqtt
   configs:
     broker: tcp://127.0.0.1:1883
-    access_token: YOUR_GATEWAY_TOKEN
+    mode: gateway
+    topic: nms-agent/thingsboard/telemetry
     strict_queue_mode: true
+
+    thingsboard:
+      api:
+        base_url: ${TB_URL}
+        api_key: ${TB_API_KEY}
+      site:
+        key: branch-b
+        asset_id: a75abc20-1839-11f1-a070-473c29007b79
+        asset_name: Branch-B

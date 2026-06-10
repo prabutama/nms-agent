@@ -1859,6 +1859,24 @@ Status update:
 Notes:
 - Adapter config string values in `adapters.yml` now support `${ENV_VAR}` expansion through the process environment, not only path fields in `agent.yml`.
 - Added systemd `EnvironmentFile` support and sample `nms-agent.env` so deployed binaries can consume `TB_URL` and site-scoped ThingsBoard API keys without hardcoding secrets in YAML.
+
+2026-06-08 17:35
+Task: Align ThingsBoard API key env naming
+Changed files:
+- .env
+- configs/adapters.yml
+- configs/examples/hq-adapters.yml
+- internal/config/loader_test.go
+- packaging/systemd/nms-agent.env
+- packaging/systemd/README.md
+- docs/CONFIG_SCHEMA.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/config
+Status update:
+- Phase 14K follow-up: API key env naming aligned DONE
+Notes:
+- Standardized ThingsBoard REST API key environment variable to `TB_API_KEY` so site deployments no longer need site-specific variable names in config examples and systemd env files.
 ```
 
 2026-06-05 13:20

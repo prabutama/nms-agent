@@ -65,5 +65,5 @@ Example:
 
 ```bash
 TB_URL=https://nms.prabutama.my.id
-TB_API_KEY_BR_B=replace-with-site-api-key
+TB_API_KEY=replace-with-site-api-key
 ```
