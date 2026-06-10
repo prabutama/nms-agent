@@ -188,10 +188,16 @@ adapters:
   - `strict_queue_mode`: fail-fast on disconnect so SQLite pending reflects broker outages (default `false`).
   - `connect_timeout`: Go duration (default `5s`).
   - `publish_timeout`: Go duration (default `5s`).
+  - `thingsboard.api.base_url`: base URL REST ThingsBoard untuk jalur manajemen hybrid.
+  - `thingsboard.api.api_key`: API key REST untuk customer/site scope.
+  - `thingsboard.site.key`: logical site key internal agent.
+  - `thingsboard.site.asset_id`: target asset site untuk relation dan topology attributes.
+  - `thingsboard.site.asset_name`: optional nama asset untuk audit/debug.
   Notes:
   - Adapter publishes payload grouped by device and timestamp in ThingsBoard-style `{"device":[{"ts":...,"values":{...}}]}` format.
   - Adapter will publish metric value plus metadata keys: `<metric>__value_type` and `<metric>__tags` (includes threshold tags like `threshold.status`).
   - In `gateway` mode this payload is intended to be consumed by a ThingsBoard Gateway MQTT connector with a thin/pass-through custom converter.
+  - Jalur hybrid management memakai REST API untuk relation `ASSET(site) --Contains--> DEVICE` dan publish topology snapshot ke `SERVER_SCOPE` attribute asset site. Gagal pada jalur management tidak boleh mematikan telemetry utama.
 
 Example:
 
@@ -214,6 +220,14 @@ adapters:
     mode: gateway
     topic: nms-agent/thingsboard/telemetry
     strict_queue_mode: true
+    thingsboard:
+      api:
+        base_url: ${TB_URL}
+        api_key: ${TB_API_KEY_BR_B}
+      site:
+        key: branch-b
+        asset_id: a75abc20-1839-11f1-a070-473c29007b79
+        asset_name: Branch-B
 ```
 
 ## .env usage

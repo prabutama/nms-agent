@@ -50,6 +50,13 @@
 | `internal/adapters/mqtt_generic_adapter.go` | Generic MQTT adapter Phase 8: publish canonical telemetry JSON ke broker MQTT (config: broker/topic/qos/retain/auth/timeout + `strict_queue_mode`). |
 | `internal/adapters/thingsboard_mqtt_adapter.go` | ThingsBoard MQTT adapter Phase 8: mendukung mode `direct` (Gateway API token auth) dan `gateway` (publish ke broker untuk ThingsBoard Gateway connector), mengagregasi payload per device+timestamp, merapikan key `snmp.if.*`/`snmp.host.storage.*`, dan di direct mode dapat memproyeksikan route string records ke attributes. |
 | `internal/adapters/thingsboard_mqtt_route_test.go` | Unit test projection route inventory di ThingsBoard direct mode: route summary tetap telemetry sementara route string detail dipublish sebagai attributes. |
+| `internal/integrations/thingsboard/models.go` | Model integration ThingsBoard untuk site context, relation, device info, dan topology snapshot site-local. |
+| `internal/integrations/thingsboard/client.go` | REST client ThingsBoard berbasis API key untuk check auth, lookup relation/device, dan publish SERVER_SCOPE attributes asset site. |
+| `internal/integrations/thingsboard/site_context.go` | Validasi site context single-site per agent (`thingsboard.site`) agar integration hybrid tetap sederhana saat deploy per site. |
+| `internal/integrations/thingsboard/relation_reconciler.go` | Reconciler warning-only untuk memastikan relation `ASSET(site) --Contains--> DEVICE` tanpa mengganggu telemetry utama. |
+| `internal/integrations/thingsboard/topology_builder.go` | Builder topology logis IPv4 site-local dari route snapshot canonical: device, subnet, dan external gateway nodes + edges. |
+| `internal/integrations/thingsboard/topology_publisher.go` | Publisher topology site-local ke SERVER_SCOPE attributes asset site hanya saat fingerprint berubah. |
+| `internal/integrations/thingsboard/site_context_test.go` | Unit test validasi site context dan build topology site-local minimal untuk integration layer ThingsBoard. |
 | `internal/adapters/tui_adapter.go` | Adapter TUI: parsing config, start Bubble Tea program, `SendBatch()` inject telemetry via `Program.Send()`, `Close()` quit.                      |
 | `internal/adapters/tui_model.go` | Model TUI: state per-device/per-interface, simpan health ICMP (reachable/latency/jitter/loss), dedup alerts, filter `snmp.if.*`, memory ala `free` (UCD) dengan fallback hrStorage. |
 | `internal/adapters/tui_view.go` | View/layout TUI: 2-pane (device list + detail), truncation/MaxWidth anti-overlap, render Health (reachable/latency/jitter/loss), resources+Mem/Swap ala `free`. |
@@ -85,6 +92,7 @@
 | `docs/CONFIG_SCHEMA.md`        | Dokumentasi schema config YAML (agent.yml/adapters.yml/devices/thresholds/discovery) dan opsi adapter/discovery.           |
 | `docs/ADAPTER_CONTRACT.md`     | Kontrak adapter: aturan boundary adapter terhadap queue dan canonical telemetry, termasuk projection canonical string records ke attribute channel platform bila diperlukan.                                                |
 | `docs/ROUTE_INVENTORY.md`      | Dokumen perilaku route inventory built-in: urutan provider, canonical outputs, resolusi interface, dan persiapan data untuk topology builder. |
+| `docs/thingsboard.json`        | OpenAPI spec ThingsBoard yang dipakai sebagai referensi endpoint REST untuk asset, device, relation, attributes, dan otomasi manajemen. |
 | `docs/DEVELOPMENT_STAGES.md`   | Checklist phase/stage pengembangan + development log + catatan validasi per task.                                                                  |
 | `packaging/systemd/nms-agent.service` | Unit file systemd untuk menjalankan `nms-agent` sebagai service, termasuk `ExecReload` (SIGHUP).                                               |
 | `packaging/systemd/install.sh` | Script install systemd (build dari repo): setup user/dir, install config, install unit, enable+start service.                                       |

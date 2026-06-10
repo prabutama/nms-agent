@@ -11,7 +11,9 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 
+	tbintegration "nms-agent/internal/integrations/thingsboard"
 	"nms-agent/internal/models"
+	"nms-agent/internal/routes"
 )
 
 type thingsboardMQTTConfig struct {
@@ -28,6 +30,7 @@ type thingsboardMQTTConfig struct {
 	StrictQueue    bool
 	ConnectTimeout time.Duration
 	PublishTimeout time.Duration
+	Integration    tbintegration.Config
 }
 
 func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, error) {
@@ -64,6 +67,27 @@ func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, erro
 	}
 	if v, ok := cfg["password"].(string); ok {
 		c.Password = v
+	}
+	if v, ok := cfg["thingsboard"].(map[string]any); ok {
+		if api, ok := v["api"].(map[string]any); ok {
+			if s, ok := api["base_url"].(string); ok {
+				c.Integration.API.BaseURL = strings.TrimSpace(s)
+			}
+			if s, ok := api["api_key"].(string); ok {
+				c.Integration.API.APIKey = strings.TrimSpace(s)
+			}
+		}
+		if site, ok := v["site"].(map[string]any); ok {
+			if s, ok := site["key"].(string); ok {
+				c.Integration.Site.Key = strings.TrimSpace(s)
+			}
+			if s, ok := site["asset_id"].(string); ok {
+				c.Integration.Site.AssetID = strings.TrimSpace(s)
+			}
+			if s, ok := site["asset_name"].(string); ok {
+				c.Integration.Site.AssetName = strings.TrimSpace(s)
+			}
+		}
 	}
 	if v, ok := cfg["client_id"].(string); ok {
 		c.ClientID = strings.TrimSpace(v)
@@ -139,6 +163,9 @@ type ThingsBoardMQTTAdapter struct {
 	cfg    thingsboardMQTTConfig
 	client genericMQTTClient
 	obs    AdapterObserver
+	rest   *tbintegration.Client
+	rels   *tbintegration.RelationReconciler
+	topo   *tbintegration.TopologyPublisher
 }
 
 func (a *ThingsBoardMQTTAdapter) SetObserver(hub AdapterObserver) {
@@ -171,7 +198,14 @@ func NewThingsBoardMQTTAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, err
 	opts.SetCleanSession(true)
 
 	cli := mqtt.NewClient(opts)
-	return &ThingsBoardMQTTAdapter{cfg: c, client: cli}, nil
+	adapter := &ThingsBoardMQTTAdapter{cfg: c, client: cli}
+	if c.Integration.API.BaseURL != "" && c.Integration.API.APIKey != "" && c.Integration.Site.AssetID != "" {
+		rest := tbintegration.NewClient(c.Integration.API)
+		adapter.rest = rest
+		adapter.rels = tbintegration.NewRelationReconciler(rest, c.Integration.Site)
+		adapter.topo = tbintegration.NewTopologyPublisher(rest, c.Integration.Site)
+	}
+	return adapter, nil
 }
 
 func (a *ThingsBoardMQTTAdapter) ensureConnected(ctx context.Context) error {
@@ -257,7 +291,56 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		a.obs.Update(batch)
 		a.obs.UpdateStatus("published", fmt.Sprintf("count=%d", len(batch)))
 	}
+	a.runManagementSideEffects(ctx, batch)
 	return nil
+}
+
+func (a *ThingsBoardMQTTAdapter) runManagementSideEffects(ctx context.Context, batch []models.Telemetry) {
+	if a.rels == nil && a.topo == nil {
+		return
+	}
+	deviceNames := uniqueDeviceNames(batch)
+	if a.rels != nil && len(deviceNames) > 0 {
+		if err := a.rels.EnsureContainsRelations(ctx, deviceNames); err != nil && a.obs != nil {
+			a.obs.UpdateStatus("tb_relation_warning", err.Error())
+		}
+	}
+	if a.topo != nil {
+		snapshots := routeSnapshotsFromBatch(batch)
+		if len(snapshots) > 0 {
+			if err := a.topo.PublishIfChanged(ctx, snapshots); err != nil && a.obs != nil {
+				a.obs.UpdateStatus("tb_topology_warning", err.Error())
+			}
+		}
+	}
+}
+
+func uniqueDeviceNames(batch []models.Telemetry) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(batch))
+	for _, t := range batch {
+		if t.DeviceID == "" || seen[t.DeviceID] {
+			continue
+		}
+		seen[t.DeviceID] = true
+		out = append(out, t.DeviceID)
+	}
+	return out
+}
+
+func routeSnapshotsFromBatch(batch []models.Telemetry) []routes.RouteSnapshot {
+	out := make([]routes.RouteSnapshot, 0)
+	for _, t := range batch {
+		if t.Metric != "route.ipv4.snapshot" || t.ValueType != "string" || t.ValueString == nil || *t.ValueString == "" {
+			continue
+		}
+		var snap routes.RouteSnapshot
+		if err := json.Unmarshal([]byte(*t.ValueString), &snap); err != nil {
+			continue
+		}
+		out = append(out, snap)
+	}
+	return out
 }
 
 func buildThingsBoardPayloads(mode string, batch []models.Telemetry) (map[string][]tbGatewayTelemetry, map[string]map[string]any, error) {

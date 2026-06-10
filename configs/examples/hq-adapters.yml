@@ -9,3 +9,11 @@ adapters:
     mode: gateway
     topic: nms-agent/thingsboard/telemetry
     strict_queue_mode: true
+    thingsboard:
+      api:
+        base_url: ${TB_URL}
+        api_key: ${TB_API_KEY_TENANT}
+      site:
+        key: hq
+        asset_id: 71bd9b50-1839-11f1-a070-473c29007b79
+        asset_name: HeadQuarter

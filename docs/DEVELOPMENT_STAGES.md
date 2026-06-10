@@ -1815,6 +1815,30 @@ Notes:
 - Route inventory is now built-in for every SNMP-enabled device with primary `ipCidrRouteTable`, legacy `ipRouteTable` fallback, and non-fatal best-effort `inetCidrRouteTable` placeholder.
 - Core still emits single canonical records only; Generic MQTT remains unchanged, ThingsBoard gateway mode keeps projection in the external converter, and ThingsBoard direct mode may split route string records into attributes.
 - Route snapshots include stable fingerprints and `ifIndex=0` next-hop resolution to connected interfaces, preparing data for future logical topology without adding a new queue contract.
+
+2026-06-08 16:10
+Task: Add site-scoped ThingsBoard hybrid management integration
+Changed files:
+- internal/integrations/thingsboard/models.go
+- internal/integrations/thingsboard/client.go
+- internal/integrations/thingsboard/site_context.go
+- internal/integrations/thingsboard/relation_reconciler.go
+- internal/integrations/thingsboard/topology_builder.go
+- internal/integrations/thingsboard/topology_publisher.go
+- internal/integrations/thingsboard/site_context_test.go
+- internal/adapters/thingsboard_mqtt_adapter.go
+- docs/CONFIG_SCHEMA.md
+- configs/examples/hq-adapters.yml
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/adapters ./internal/routes ./internal/integrations/thingsboard ./cmd/nms-agent
+Status update:
+- Phase 14K: ThingsBoard hybrid management foundation DONE
+Notes:
+- Added single-site ThingsBoard integration config in `adapters.yml` for REST management using customer/site API key plus site asset context.
+- `thingsboard_mqtt` now triggers warning-only side workflows after successful publish: ensure `ASSET(site) --Contains--> DEVICE` relations and publish site-local topology snapshot to SERVER_SCOPE asset attributes.
+- Telemetry/data plane remains unchanged and queue-safe; relation/topology failures do not stop main monitoring flow.
 ```
 
 2026-06-05 13:20
