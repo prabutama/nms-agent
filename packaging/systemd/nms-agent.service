@@ -12,6 +12,7 @@ RuntimeDirectory=nms-agent
 RuntimeDirectoryMode=0755
 
 WorkingDirectory=/etc/nms-agent
+EnvironmentFile=-/etc/nms-agent/nms-agent.env
 
 ExecStart=/opt/nms-agent/nms-agent run --config /etc/nms-agent/agent.yml --collector-mode auto
 ExecReload=/bin/kill -HUP $MAINPID

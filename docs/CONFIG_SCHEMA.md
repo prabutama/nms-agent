@@ -232,4 +232,11 @@ adapters:
 
 ## .env usage
 
-Phase 2 does not load `.env` files yet. Only `${ENV_VAR}` expansion is supported for path strings.
+The binary does not load `.env` files automatically. It expands `${ENV_VAR}` from the current process environment.
+
+This expansion applies to:
+
+- config paths in `agent.yml`
+- string values inside `adapters.yml` configs
+
+For service deployment, prefer setting environment via systemd `EnvironmentFile` (for example `/etc/nms-agent/nms-agent.env`).

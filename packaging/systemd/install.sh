@@ -41,7 +41,7 @@ mkdir -p "${OPT_DIR}" "${ETC_DIR}" "${ETC_DIR}/devices.d" "${LIB_DIR}" "${LOG_DI
 install -m 0644 "${SCRIPT_DIR}/nms-agent.service" "${UNIT_PATH}"
 
 # Preserve existing config files; deploy sample as .dist.
-for f in agent.yml adapters.yml thresholds.yml; do
+for f in agent.yml adapters.yml thresholds.yml nms-agent.env; do
   src="${SCRIPT_DIR}/${f}"
   dst="${ETC_DIR}/${f}"
   dist="${ETC_DIR}/${f}.dist"

@@ -1839,6 +1839,26 @@ Notes:
 - Added single-site ThingsBoard integration config in `adapters.yml` for REST management using customer/site API key plus site asset context.
 - `thingsboard_mqtt` now triggers warning-only side workflows after successful publish: ensure `ASSET(site) --Contains--> DEVICE` relations and publish site-local topology snapshot to SERVER_SCOPE asset attributes.
 - Telemetry/data plane remains unchanged and queue-safe; relation/topology failures do not stop main monitoring flow.
+
+2026-06-08 17:10
+Task: Add deploy-ready environment handling for adapter config
+Changed files:
+- internal/config/loader.go
+- internal/config/loader_test.go
+- packaging/systemd/nms-agent.service
+- packaging/systemd/nms-agent.env
+- packaging/systemd/install.sh
+- packaging/systemd/README.md
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/config
+Status update:
+- Phase 14K follow-up: environment handling for built binaries DONE
+Notes:
+- Adapter config string values in `adapters.yml` now support `${ENV_VAR}` expansion through the process environment, not only path fields in `agent.yml`.
+- Added systemd `EnvironmentFile` support and sample `nms-agent.env` so deployed binaries can consume `TB_URL` and site-scoped ThingsBoard API keys without hardcoding secrets in YAML.
 ```
 
 2026-06-05 13:20

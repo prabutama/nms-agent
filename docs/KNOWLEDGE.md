@@ -95,6 +95,7 @@
 | `docs/thingsboard.json`        | OpenAPI spec ThingsBoard yang dipakai sebagai referensi endpoint REST untuk asset, device, relation, attributes, dan otomasi manajemen. |
 | `docs/DEVELOPMENT_STAGES.md`   | Checklist phase/stage pengembangan + development log + catatan validasi per task.                                                                  |
 | `packaging/systemd/nms-agent.service` | Unit file systemd untuk menjalankan `nms-agent` sebagai service, termasuk `ExecReload` (SIGHUP).                                               |
+| `packaging/systemd/nms-agent.env` | Contoh file environment untuk deployment systemd agar adapter config dapat memakai `${TB_URL}` dan API key ThingsBoard tanpa hardcode di YAML.                                                                 |
 | `packaging/systemd/install.sh` | Script install systemd (build dari repo): setup user/dir, install config, install unit, enable+start service.                                       |
 | `packaging/systemd/README.md`  | Panduan operasi systemd: install, start/stop/reload, dan cara melihat log journald.                                                                 |
 | `packaging/systemd/agent.yml`  | Sample config untuk deployment systemd (path absolut `/etc`, `/var/lib`, dll).                                                                      |

@@ -57,6 +57,9 @@ func LoadFromFile(path string) (Loaded, error) {
 	if err != nil {
 		return Loaded{}, err
 	}
+	if adapters.Adapters.Configs != nil {
+		adapters.Adapters.Configs = expandEnvMap(adapters.Adapters.Configs)
+	}
 
 	return Loaded{
 		Root:        root,
@@ -139,4 +142,29 @@ func loadYAMLFile[T any](path string) (T, error) {
 // It does not load .env files yet; it only expands using the current process env.
 func expandEnv(s string) string {
 	return os.ExpandEnv(strings.TrimSpace(s))
+}
+
+func expandEnvMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = expandEnvAny(v)
+	}
+	return out
+}
+
+func expandEnvAny(v any) any {
+	switch x := v.(type) {
+	case string:
+		return expandEnv(x)
+	case map[string]any:
+		return expandEnvMap(x)
+	case []any:
+		out := make([]any, 0, len(x))
+		for _, item := range x {
+			out = append(out, expandEnvAny(item))
+		}
+		return out
+	default:
+		return v
+	}
 }

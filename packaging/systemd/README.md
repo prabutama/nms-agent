@@ -18,6 +18,10 @@ This will:
 - install unit into `/etc/systemd/system/nms-agent.service`
 - enable and start the service
 
+It also installs a sample environment file:
+
+- `/etc/nms-agent/nms-agent.env`
+
 ## Service Commands
 
 ```bash
@@ -40,6 +44,7 @@ journalctl -u nms-agent -f
 - `/etc/nms-agent/adapters.yml`
 - `/etc/nms-agent/thresholds.yml`
 - `/etc/nms-agent/devices.d/*.yml`
+- `/etc/nms-agent/nms-agent.env`
 
 Queue data is stored under:
 
@@ -49,3 +54,16 @@ Queue data is stored under:
 
 `systemctl reload nms-agent` sends `SIGHUP` to the running agent process.
 The agent will reload config and rebuild its runtime pipeline without restarting the process.
+
+## Environment Variables
+
+The binary does not auto-load `.env` files. It expands `${ENV_VAR}` from the process environment.
+
+For systemd deployment, use `/etc/nms-agent/nms-agent.env` together with the unit's `EnvironmentFile`.
+
+Example:
+
+```bash
+TB_URL=https://nms.prabutama.my.id
+TB_API_KEY_BR_B=replace-with-site-api-key
+```
