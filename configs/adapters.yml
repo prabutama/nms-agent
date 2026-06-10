@@ -27,3 +27,4 @@ adapters:
         key: branch-b
         asset_id: a75abc20-1839-11f1-a070-473c29007b79
         asset_name: Branch-B
+        customer_id: ${TB_CUSTOMER_ID}

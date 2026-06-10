@@ -32,9 +32,9 @@ func (r *RelationReconciler) EnsureContainsRelations(ctx context.Context, device
 	}
 	r.mu.Unlock()
 	for _, name := range deviceNames {
-		device, err := r.Client.GetDeviceByName(ctx, name)
+		device, err := r.Client.GetDeviceByName(ctx, name, r.Site.CustomerID)
 		if err != nil {
-			return err
+			continue
 		}
 		r.mu.Lock()
 		exists := r.cache[device.ID.ID]
@@ -43,7 +43,7 @@ func (r *RelationReconciler) EnsureContainsRelations(ctx context.Context, device
 			continue
 		}
 		if err := r.Client.CreateRelation(ctx, r.Site.AssetID, device.ID.ID, "Contains"); err != nil {
-			return err
+			continue
 		}
 		r.mu.Lock()
 		r.cache[device.ID.ID] = true

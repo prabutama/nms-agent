@@ -13,9 +13,10 @@ type APIConfig struct {
 }
 
 type SiteConfig struct {
-	Key       string
-	AssetID   string
-	AssetName string
+	Key        string
+	AssetID    string
+	AssetName  string
+	CustomerID string
 }
 
 type Relation struct {

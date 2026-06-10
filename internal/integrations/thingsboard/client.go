@@ -85,27 +85,15 @@ func (c *Client) GetAssetServerAttributes(ctx context.Context, assetID string, k
 	return result, nil
 }
 
-func (c *Client) GetDeviceByName(ctx context.Context, name string) (*DeviceInfo, error) {
-	var out DeviceInfo
-	err := c.doJSON(ctx, http.MethodGet, c.baseURL+"/api/tenant/deviceInfos?deviceName="+url.QueryEscape(name), nil, &out)
-	if err == nil && out.ID.ID != "" {
-		return &out, nil
-	}
-	type devicePage struct {
-		Data []DeviceInfo `json:"data"`
-	}
-	var page devicePage
-	err2 := c.doJSON(ctx, http.MethodGet, c.baseURL+"/api/customer/deviceInfos?pageSize=100&page=0&textSearch="+url.QueryEscape(name), nil, &page)
-	if err2 != nil {
-		if err != nil {
-			return nil, err
+func (c *Client) GetDeviceByName(ctx context.Context, name string, customerID string) (*DeviceInfo, error) {
+	if customerID != "" {
+		type devicePage struct {
+			Data []DeviceInfo `json:"data"`
 		}
-		return nil, err2
-	}
-	for _, device := range page.Data {
-		if device.Name == name {
-			copy := device
-			return &copy, nil
+		var page devicePage
+		err := c.doJSON(ctx, http.MethodGet, c.baseURL+"/api/customer/"+url.PathEscape(customerID)+"/deviceInfos?pageSize=1&page=0&textSearch="+url.QueryEscape(name), nil, &page)
+		if err == nil && len(page.Data) > 0 {
+			return &page.Data[0], nil
 		}
 	}
 	return nil, fmt.Errorf("device %q not found", name)

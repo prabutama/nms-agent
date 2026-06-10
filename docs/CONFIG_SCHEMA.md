@@ -193,6 +193,7 @@ adapters:
   - `thingsboard.site.key`: logical site key internal agent.
   - `thingsboard.site.asset_id`: target asset site untuk relation dan topology attributes.
   - `thingsboard.site.asset_name`: optional nama asset untuk audit/debug.
+  - `thingsboard.site.customer_id`: customer UUID ThingsBoard untuk REST device lookup (khusus customer-scope API key).
   Notes:
   - Adapter publishes payload grouped by device and timestamp in ThingsBoard-style `{"device":[{"ts":...,"values":{...}}]}` format.
   - Adapter will publish metric value plus metadata keys: `<metric>__value_type` and `<metric>__tags` (includes threshold tags like `threshold.status`).
@@ -228,6 +229,7 @@ adapters:
         key: branch-b
         asset_id: a75abc20-1839-11f1-a070-473c29007b79
         asset_name: Branch-B
+        customer_id: ${TB_CUSTOMER_ID}
 ```
 
 ## .env usage

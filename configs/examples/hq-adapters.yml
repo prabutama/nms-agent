@@ -17,3 +17,4 @@ adapters:
         key: hq
         asset_id: 71bd9b50-1839-11f1-a070-473c29007b79
         asset_name: HeadQuarter
+        customer_id: ${TB_CUSTOMER_ID}

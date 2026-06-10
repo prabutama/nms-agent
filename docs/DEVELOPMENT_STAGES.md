@@ -1905,3 +1905,29 @@ Notes:
 - Discovery provider sekarang dipilih dari config dan mendukung `provider: active` untuk ICMP subnet probe selain mode pasif `netlink`.
 - CLI discovery manual dan daemon discovery loop sekarang memakai factory provider yang sama agar perilaku candidate konsisten.
 ```
+
+2026-06-11 10:00
+Task: Fix ThingsBoard auto-create relations — add customer_id config + fix GetDeviceByName endpoint
+Changed files:
+- internal/integrations/thingsboard/models.go
+- internal/integrations/thingsboard/client.go
+- internal/integrations/thingsboard/relation_reconciler.go
+- internal/adapters/thingsboard_mqtt_adapter.go
+- configs/adapters.yml
+- configs/examples/hq-adapters.yml
+- packaging/systemd/nms-agent.env
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go build ./...
+- go test ./internal/integrations/thingsboard ./internal/adapters
+Status update:
+- Phase 14L: ThingsBoard relation auto-create fix DONE
+Notes:
+- Added `customer_id` field to `SiteConfig` in `adapters.yml` for customer-scoped device lookup.
+- Fixed `GetDeviceByName` in `client.go` to use correct ThingsBoard endpoint `/api/customer/{customerId}/deviceInfos?textSearch=...` instead of broken `/api/customer/deviceInfos`.
+- `EnsureContainsRelations` in `relation_reconciler.go` now uses graceful continue (skip device lookup failure instead of stopping whole reconciliation).
+- Added stderr diagnostic logging in `runManagementSideEffects` so errors are visible via `journalctl -u nms-agent.service` even without `nms-agentctl view`.
+- Updated systemd env file with `TB_CUSTOMER_ID` placeholder.
+```

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -86,6 +87,9 @@ func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, erro
 			}
 			if s, ok := site["asset_name"].(string); ok {
 				c.Integration.Site.AssetName = strings.TrimSpace(s)
+			}
+			if s, ok := site["customer_id"].(string); ok {
+				c.Integration.Site.CustomerID = strings.TrimSpace(s)
 			}
 		}
 	}
@@ -300,16 +304,23 @@ func (a *ThingsBoardMQTTAdapter) runManagementSideEffects(ctx context.Context, b
 		return
 	}
 	deviceNames := uniqueDeviceNames(batch)
+	fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] management side-effects: devices=%d customer_id=%s\n", len(deviceNames), a.cfg.Integration.Site.CustomerID)
 	if a.rels != nil && len(deviceNames) > 0 {
-		if err := a.rels.EnsureContainsRelations(ctx, deviceNames); err != nil && a.obs != nil {
-			a.obs.UpdateStatus("tb_relation_warning", err.Error())
+		if err := a.rels.EnsureContainsRelations(ctx, deviceNames); err != nil {
+			fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] relation error: %v\n", err)
+			if a.obs != nil {
+				a.obs.UpdateStatus("tb_relation_warning", err.Error())
+			}
 		}
 	}
 	if a.topo != nil {
 		snapshots := routeSnapshotsFromBatch(batch)
 		if len(snapshots) > 0 {
-			if err := a.topo.PublishIfChanged(ctx, snapshots); err != nil && a.obs != nil {
-				a.obs.UpdateStatus("tb_topology_warning", err.Error())
+			if err := a.topo.PublishIfChanged(ctx, snapshots); err != nil {
+				fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] topology error: %v\n", err)
+				if a.obs != nil {
+					a.obs.UpdateStatus("tb_topology_warning", err.Error())
+				}
 			}
 		}
 	}
