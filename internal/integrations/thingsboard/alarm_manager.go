@@ -28,7 +28,7 @@ func NewAlarmManager(client *Client, site SiteConfig) *AlarmManager {
 }
 
 func (m *AlarmManager) ProcessBatch(ctx context.Context, batch []models.Telemetry) error {
-	if m == nil || m.client == nil || m.site.CustomerID == "" {
+	if m == nil || m.client == nil {
 		return nil
 	}
 	for _, t := range batch {
@@ -115,7 +115,7 @@ func (m *AlarmManager) lookupOriginator(ctx context.Context, deviceName string) 
 	if deviceName == "" {
 		return nil, fmt.Errorf("alarm originator device name is empty")
 	}
-	device, err := m.client.GetDeviceByName(ctx, deviceName, m.site.CustomerID)
+	device, err := m.client.GetDeviceByName(ctx, deviceName)
 	if err != nil {
 		return nil, err
 	}

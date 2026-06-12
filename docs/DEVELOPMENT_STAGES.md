@@ -1897,7 +1897,7 @@ Notes:
 - Threshold processor now injects `threshold.status=normal` for metrics with configured rules so alarms can auto-clear.
 - Added ThingsBoard alarm manager with metric-to-alarm-type mapping and create/clear REST calls.
 - ThingsBoard adapter now processes alarm side-effects after publish alongside relation reconciliation and topology publishing.
-- Separate tenant API key (`TB_TENANT_API_KEY`) digunakan khusus untuk alarm karena customer API key tidak memiliki izin `POST /api/alarm`.
+- REST management kini disederhanakan ke tenant API key tunggal (`TB_API_KEY`) untuk device lookup, relation, topology, dan alarm.
 
 2026-06-12 17:45
 Task: Add tenant API key for alarm REST operations
@@ -1917,7 +1917,7 @@ Validation:
 Status update:
 - Phase 14L follow-up: Tenant API key for alarm DONE
 Notes:
-- Added tenant_api_key support to Client struct: alarm operations (CreateAlarm/ClearAlarm) use doJSONWithAuth with tenant key; all other operations keep customer apiKey.
+- Added tenant API key support to Client struct during the interim alarm experiment; superseded by the tenant-only REST refactor.
 - Updated adapter config parsing, config files, env file, and docs.
 ```
 
@@ -1948,8 +1948,8 @@ Notes:
 - CLI discovery manual dan daemon discovery loop sekarang memakai factory provider yang sama agar perilaku candidate konsisten.
 ```
 
-2026-06-11 10:00
-Task: Fix ThingsBoard auto-create relations — add customer_id config + fix GetDeviceByName endpoint
+ 2026-06-11 10:00
+ Task: Fix ThingsBoard auto-create relations — add customer_id config + fix GetDeviceByName endpoint
 Changed files:
 - internal/integrations/thingsboard/models.go
 - internal/integrations/thingsboard/client.go
@@ -1967,9 +1967,34 @@ Validation:
 Status update:
 - Phase 14L: ThingsBoard relation auto-create fix DONE
 Notes:
-- Added `customer_id` field to `SiteConfig` in `adapters.yml` for customer-scoped device lookup.
-- Fixed `GetDeviceByName` in `client.go` to use correct ThingsBoard endpoint `/api/customer/{customerId}/deviceInfos?textSearch=...` instead of broken `/api/customer/deviceInfos`.
+- Added `customer_id` field to `SiteConfig` in `adapters.yml` for customer-scoped device lookup (later superseded by tenant-only REST flow).
+- Fixed `GetDeviceByName` in `client.go` to use correct ThingsBoard endpoint `/api/customer/{customerId}/deviceInfos?textSearch=...` before the tenant-only refactor.
 - `EnsureContainsRelations` in `relation_reconciler.go` now uses graceful continue (skip device lookup failure instead of stopping whole reconciliation).
 - Added stderr diagnostic logging in `runManagementSideEffects` so errors are visible via `journalctl -u nms-agent.service` even without `nms-agentctl view`.
-- Updated systemd env file with `TB_CUSTOMER_ID` placeholder.
+- Updated systemd env file with `TB_CUSTOMER_ID` placeholder (later removed in tenant-only refactor).
+
+2026-06-12 18:00
+Task: Simplify ThingsBoard REST management to tenant-only API key
+Changed files:
+- internal/integrations/thingsboard/models.go
+- internal/integrations/thingsboard/client.go
+- internal/integrations/thingsboard/relation_reconciler.go
+- internal/integrations/thingsboard/alarm_manager.go
+- internal/integrations/thingsboard/site_context.go
+- internal/adapters/thingsboard_mqtt_adapter.go
+- configs/adapters.yml
+- configs/examples/hq-adapters.yml
+- packaging/systemd/nms-agent.env
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/processors ./internal/integrations/thingsboard ./internal/adapters ./internal/config ./internal/routes ./internal/viewer ./cmd/nms-agentctl ./internal/discovery/...
+- go build ./...
+Status update:
+- Phase 14L follow-up: tenant-only REST management DONE
+Notes:
+- Removed customer-level REST config and made `TB_API_KEY` the single ThingsBoard REST auth for relations, topology, device lookup, and alarms.
+- Kept runtime flow intact: telemetry publish → relation reconciliation → topology publish → alarm handling.
+- Alarm handling and relation lookup now use tenant-scoped REST only, matching the requested deployment model.
 ```

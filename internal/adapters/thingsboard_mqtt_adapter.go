@@ -77,9 +77,6 @@ func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, erro
 			if s, ok := api["api_key"].(string); ok {
 				c.Integration.API.APIKey = strings.TrimSpace(s)
 			}
-			if s, ok := api["tenant_api_key"].(string); ok {
-				c.Integration.API.TenantAPIKey = strings.TrimSpace(s)
-			}
 		}
 		if site, ok := v["site"].(map[string]any); ok {
 			if s, ok := site["key"].(string); ok {
@@ -90,9 +87,6 @@ func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, erro
 			}
 			if s, ok := site["asset_name"].(string); ok {
 				c.Integration.Site.AssetName = strings.TrimSpace(s)
-			}
-			if s, ok := site["customer_id"].(string); ok {
-				c.Integration.Site.CustomerID = strings.TrimSpace(s)
 			}
 		}
 	}
@@ -309,7 +303,7 @@ func (a *ThingsBoardMQTTAdapter) runManagementSideEffects(ctx context.Context, b
 		return
 	}
 	deviceNames := uniqueDeviceNames(batch)
-	fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] management side-effects: devices=%d customer_id=%s\n", len(deviceNames), a.cfg.Integration.Site.CustomerID)
+	fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] management side-effects: devices=%d site=%s\n", len(deviceNames), a.cfg.Integration.Site.Key)
 	if a.rels != nil && len(deviceNames) > 0 {
 		if err := a.rels.EnsureContainsRelations(ctx, deviceNames); err != nil {
 			fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] relation error: %v\n", err)

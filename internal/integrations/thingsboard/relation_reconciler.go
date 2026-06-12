@@ -32,7 +32,7 @@ func (r *RelationReconciler) EnsureContainsRelations(ctx context.Context, device
 	}
 	r.mu.Unlock()
 	for _, name := range deviceNames {
-		device, err := r.Client.GetDeviceByName(ctx, name, r.Site.CustomerID)
+		device, err := r.Client.GetDeviceByName(ctx, name)
 		if err != nil {
 			continue
 		}

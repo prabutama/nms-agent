@@ -8,16 +8,14 @@ type Config struct {
 }
 
 type APIConfig struct {
-	BaseURL      string
-	APIKey       string
-	TenantAPIKey string
+	BaseURL string
+	APIKey  string
 }
 
 type SiteConfig struct {
-	Key        string
-	AssetID    string
-	AssetName  string
-	CustomerID string
+	Key       string
+	AssetID   string
+	AssetName string
 }
 
 type Relation struct {
