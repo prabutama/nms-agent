@@ -189,7 +189,8 @@ adapters:
   - `connect_timeout`: Go duration (default `5s`).
   - `publish_timeout`: Go duration (default `5s`).
   - `thingsboard.api.base_url`: base URL REST ThingsBoard untuk jalur manajemen hybrid.
-  - `thingsboard.api.api_key`: API key REST untuk customer/site scope.
+  - `thingsboard.api.api_key`: API key REST untuk customer/site scope (device lookup, relation, topology).
+  - `thingsboard.api.tenant_api_key`: API key tenant-scope untuk operasi alarm (create/clear). Fallback ke `api_key` jika tidak diset.
   - `thingsboard.site.key`: logical site key internal agent.
   - `thingsboard.site.asset_id`: target asset site untuk relation dan topology attributes.
   - `thingsboard.site.asset_name`: optional nama asset untuk audit/debug.

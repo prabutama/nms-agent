@@ -77,6 +77,9 @@ func parseThingsBoardMQTTConfig(cfg map[string]any) (thingsboardMQTTConfig, erro
 			if s, ok := api["api_key"].(string); ok {
 				c.Integration.API.APIKey = strings.TrimSpace(s)
 			}
+			if s, ok := api["tenant_api_key"].(string); ok {
+				c.Integration.API.TenantAPIKey = strings.TrimSpace(s)
+			}
 		}
 		if site, ok := v["site"].(map[string]any); ok {
 			if s, ok := site["key"].(string); ok {

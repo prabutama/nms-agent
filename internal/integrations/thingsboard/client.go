@@ -13,17 +13,26 @@ import (
 )
 
 type Client struct {
-	baseURL string
-	apiKey  string
-	http    *http.Client
+	baseURL       string
+	apiKey        string
+	tenantAPIKey  string
+	http          *http.Client
 }
 
 func NewClient(cfg APIConfig) *Client {
 	return &Client{
-		baseURL: strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
-		apiKey:  strings.TrimSpace(cfg.APIKey),
-		http:    &http.Client{Timeout: 10 * time.Second},
+		baseURL:      strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
+		apiKey:       strings.TrimSpace(cfg.APIKey),
+		tenantAPIKey: strings.TrimSpace(cfg.TenantAPIKey),
+		http:         &http.Client{Timeout: 10 * time.Second},
 	}
+}
+
+func (c *Client) alarmAuth() string {
+	if c.tenantAPIKey != "" {
+		return "ApiKey " + c.tenantAPIKey
+	}
+	return "ApiKey " + c.apiKey
 }
 
 func (c *Client) enabled() bool { return c != nil && c.baseURL != "" && c.apiKey != "" }
@@ -53,14 +62,14 @@ func (c *Client) CreateRelation(ctx context.Context, assetID, deviceID, relation
 
 func (c *Client) CreateAlarm(ctx context.Context, alarm AlarmRequest) (*Alarm, error) {
 	var out Alarm
-	if err := c.doJSON(ctx, http.MethodPost, c.baseURL+"/api/alarm", alarm, &out); err != nil {
+	if err := c.doJSONWithAuth(ctx, http.MethodPost, c.baseURL+"/api/alarm", alarm, &out, c.alarmAuth()); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
 func (c *Client) ClearAlarm(ctx context.Context, alarmID string) error {
-	return c.doJSON(ctx, http.MethodPost, c.baseURL+"/api/alarm/"+url.PathEscape(alarmID)+"/clear", nil, nil)
+	return c.doJSONWithAuth(ctx, http.MethodPost, c.baseURL+"/api/alarm/"+url.PathEscape(alarmID)+"/clear", nil, nil, c.alarmAuth())
 }
 
 func (c *Client) GetAlarmsByEntity(ctx context.Context, entityType, entityID string) ([]Alarm, error) {
@@ -118,6 +127,10 @@ func (c *Client) GetDeviceByName(ctx context.Context, name string, customerID st
 }
 
 func (c *Client) doJSON(ctx context.Context, method, rawURL string, body any, out any) error {
+	return c.doJSONWithAuth(ctx, method, rawURL, body, out, "ApiKey "+c.apiKey)
+}
+
+func (c *Client) doJSONWithAuth(ctx context.Context, method, rawURL string, body any, out any, authHeader string) error {
 	if !c.enabled() {
 		return fmt.Errorf("thingsboard API config is incomplete")
 	}
@@ -133,7 +146,7 @@ func (c *Client) doJSON(ctx context.Context, method, rawURL string, body any, ou
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-Authorization", "ApiKey "+c.apiKey)
+	req.Header.Set("X-Authorization", authHeader)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

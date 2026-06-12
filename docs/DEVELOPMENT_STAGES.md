@@ -1897,6 +1897,28 @@ Notes:
 - Threshold processor now injects `threshold.status=normal` for metrics with configured rules so alarms can auto-clear.
 - Added ThingsBoard alarm manager with metric-to-alarm-type mapping and create/clear REST calls.
 - ThingsBoard adapter now processes alarm side-effects after publish alongside relation reconciliation and topology publishing.
+- Separate tenant API key (`TB_TENANT_API_KEY`) digunakan khusus untuk alarm karena customer API key tidak memiliki izin `POST /api/alarm`.
+
+2026-06-12 17:45
+Task: Add tenant API key for alarm REST operations
+Changed files:
+- internal/integrations/thingsboard/models.go
+- internal/integrations/thingsboard/client.go
+- internal/adapters/thingsboard_mqtt_adapter.go
+- configs/adapters.yml
+- configs/examples/hq-adapters.yml
+- packaging/systemd/nms-agent.env
+- docs/CONFIG_SCHEMA.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./internal/integrations/thingsboard ./internal/adapters ./internal/processors
+- go build ./...
+Status update:
+- Phase 14L follow-up: Tenant API key for alarm DONE
+Notes:
+- Added tenant_api_key support to Client struct: alarm operations (CreateAlarm/ClearAlarm) use doJSONWithAuth with tenant key; all other operations keep customer apiKey.
+- Updated adapter config parsing, config files, env file, and docs.
 ```
 
 2026-06-05 13:20

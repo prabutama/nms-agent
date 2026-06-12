@@ -8,8 +8,9 @@ type Config struct {
 }
 
 type APIConfig struct {
-	BaseURL string
-	APIKey  string
+	BaseURL      string
+	APIKey       string
+	TenantAPIKey string
 }
 
 type SiteConfig struct {
