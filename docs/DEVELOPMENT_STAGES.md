@@ -1967,11 +1967,11 @@ Validation:
 Status update:
 - Phase 14L: ThingsBoard relation auto-create fix DONE
 Notes:
-- Added `customer_id` field to `SiteConfig` in `adapters.yml` for customer-scoped device lookup (later superseded by tenant-only REST flow).
-- Fixed `GetDeviceByName` in `client.go` to use correct ThingsBoard endpoint `/api/customer/{customerId}/deviceInfos?textSearch=...` before the tenant-only refactor.
+- Added `customer_id` field to `SiteConfig` in `adapters.yml` during the first pass; later removed after the tenant-only REST flow was confirmed.
+- Fixed `GetDeviceByName` in `client.go` during the first pass before the tenant-only refactor.
 - `EnsureContainsRelations` in `relation_reconciler.go` now uses graceful continue (skip device lookup failure instead of stopping whole reconciliation).
 - Added stderr diagnostic logging in `runManagementSideEffects` so errors are visible via `journalctl -u nms-agent.service` even without `nms-agentctl view`.
-- Updated systemd env file with `TB_CUSTOMER_ID` placeholder (later removed in tenant-only refactor).
+- Updated systemd env file for the initial pass; later simplified to tenant-only API key usage.
 
 2026-06-12 18:00
 Task: Simplify ThingsBoard REST management to tenant-only API key
