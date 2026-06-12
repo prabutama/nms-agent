@@ -1997,4 +1997,22 @@ Notes:
 - Removed customer-level REST config and made `TB_API_KEY` the single ThingsBoard REST auth for relations, topology, device lookup, and alarms.
 - Kept runtime flow intact: telemetry publish → relation reconciliation → topology publish → alarm handling.
 - Alarm handling and relation lookup now use tenant-scoped REST only, matching the requested deployment model.
+
+2026-06-12 18:30
+Task: Add alarm propagation fields for customer visibility
+Changed files:
+- internal/integrations/thingsboard/models.go
+- internal/integrations/thingsboard/alarm_manager.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- gofmt -w internal/integrations/thingsboard/models.go internal/integrations/thingsboard/alarm_manager.go
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 14L follow-up: alarm propagation fields DONE
+Notes:
+- Added `PropagateToTenant` and `PropagateRelationTypes` to `AlarmRequest`.
+- Default nms-agent alarms now propagate to tenant and owner with relation type `Contains` for customer visibility.
 ```

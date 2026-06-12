@@ -60,16 +60,17 @@ func (m *AlarmManager) upsertAlarm(ctx context.Context, key string, t models.Tel
 	}
 	severity := strings.ToUpper(status)
 	req := AlarmRequest{
-		Type:              alarmType,
-		Originator:        *originator,
-		Severity:          severity,
-		Acknowledged:      false,
-		Cleared:           false,
-		Propagate:         true,
-		PropagateToOwner:  true,
-		PropagateToTenant: false,
-		StartTs:           t.TS.UnixMilli(),
-		Name:              alarmType,
+		Type:                   alarmType,
+		Originator:             *originator,
+		Severity:               severity,
+		Acknowledged:           false,
+		Cleared:                false,
+		Propagate:              true,
+		PropagateToOwner:       true,
+		PropagateToTenant:      true,
+		PropagateRelationTypes: []string{"Contains"},
+		StartTs:                t.TS.UnixMilli(),
+		Name:                   alarmType,
 		Details: map[string]any{
 			"metric":        t.Metric,
 			"device_id":     t.DeviceID,

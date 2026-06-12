@@ -63,18 +63,19 @@ type TopologyEdge struct {
 }
 
 type AlarmRequest struct {
-	Type              string         `json:"type"`
-	Originator        EntityRef      `json:"originator"`
-	Severity          string         `json:"severity"`
-	Acknowledged      bool           `json:"acknowledged"`
-	Cleared           bool           `json:"cleared"`
-	Propagate         bool           `json:"propagate"`
-	PropagateToOwner  bool           `json:"propagateToOwner"`
-	PropagateToTenant bool           `json:"propagateToTenant"`
-	Details           map[string]any `json:"details,omitempty"`
-	StartTs           int64          `json:"startTs,omitempty"`
-	EndTs             int64          `json:"endTs,omitempty"`
-	Name              string         `json:"name,omitempty"`
+	Type                   string         `json:"type"`
+	Originator             EntityRef      `json:"originator"`
+	Severity               string         `json:"severity"`
+	Acknowledged           bool           `json:"acknowledged"`
+	Cleared                bool           `json:"cleared"`
+	Propagate              bool           `json:"propagate"`
+	PropagateToOwner       bool           `json:"propagateToOwner"`
+	PropagateToTenant      bool           `json:"propagateToTenant"`
+	PropagateRelationTypes []string       `json:"propagateRelationTypes,omitempty"`
+	Details                map[string]any `json:"details,omitempty"`
+	StartTs                int64          `json:"startTs,omitempty"`
+	EndTs                  int64          `json:"endTs,omitempty"`
+	Name                   string         `json:"name,omitempty"`
 }
 
 type Alarm struct {
