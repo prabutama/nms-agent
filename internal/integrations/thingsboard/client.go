@@ -51,6 +51,24 @@ func (c *Client) CreateRelation(ctx context.Context, assetID, deviceID, relation
 	return c.doJSON(ctx, http.MethodPost, c.baseURL+"/api/relation", body, nil)
 }
 
+func (c *Client) CreateAlarm(ctx context.Context, alarm AlarmRequest) (*Alarm, error) {
+	var out Alarm
+	if err := c.doJSON(ctx, http.MethodPost, c.baseURL+"/api/alarm", alarm, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) ClearAlarm(ctx context.Context, alarmID string) error {
+	return c.doJSON(ctx, http.MethodPost, c.baseURL+"/api/alarm/"+url.PathEscape(alarmID)+"/clear", nil, nil)
+}
+
+func (c *Client) GetAlarmsByEntity(ctx context.Context, entityType, entityID string) ([]Alarm, error) {
+	var out []Alarm
+	err := c.doJSON(ctx, http.MethodGet, c.baseURL+"/api/alarm/"+url.PathEscape(entityType)+"/"+url.PathEscape(entityID)+"?pageSize=100&page=0&searchStatus=ACTIVE", nil, &out)
+	return out, err
+}
+
 func (c *Client) SaveAssetServerAttributes(ctx context.Context, assetID string, attrs map[string]any) error {
 	return c.doJSON(ctx, http.MethodPost, c.baseURL+"/api/plugins/telemetry/ASSET/"+url.PathEscape(assetID)+"/SERVER_SCOPE", attrs, nil)
 }

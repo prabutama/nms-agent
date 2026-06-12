@@ -170,6 +170,7 @@ type ThingsBoardMQTTAdapter struct {
 	rest   *tbintegration.Client
 	rels   *tbintegration.RelationReconciler
 	topo   *tbintegration.TopologyPublisher
+	alarms *tbintegration.AlarmManager
 }
 
 func (a *ThingsBoardMQTTAdapter) SetObserver(hub AdapterObserver) {
@@ -208,6 +209,7 @@ func NewThingsBoardMQTTAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, err
 		adapter.rest = rest
 		adapter.rels = tbintegration.NewRelationReconciler(rest, c.Integration.Site)
 		adapter.topo = tbintegration.NewTopologyPublisher(rest, c.Integration.Site)
+		adapter.alarms = tbintegration.NewAlarmManager(rest, c.Integration.Site)
 	}
 	return adapter, nil
 }
@@ -321,6 +323,14 @@ func (a *ThingsBoardMQTTAdapter) runManagementSideEffects(ctx context.Context, b
 				if a.obs != nil {
 					a.obs.UpdateStatus("tb_topology_warning", err.Error())
 				}
+			}
+		}
+	}
+	if a.alarms != nil {
+		if err := a.alarms.ProcessBatch(ctx, batch); err != nil {
+			fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] alarm error: %v\n", err)
+			if a.obs != nil {
+				a.obs.UpdateStatus("tb_alarm_warning", err.Error())
 			}
 		}
 	}

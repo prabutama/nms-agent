@@ -359,7 +359,7 @@ func applyThresholds(t *models.Telemetry, rules []models.ThresholdRule) {
 	}
 
 	matched := false
-	status := "ok"
+	status := "normal"
 	var ruleName string
 
 	for i, r := range rules {
@@ -388,6 +388,8 @@ func applyThresholds(t *models.Telemetry, rules []models.ThresholdRule) {
 		if ruleName != "" {
 			t.Tags["threshold.rule"] = ruleName
 		}
+	} else if len(rules) > 0 {
+		t.Tags["threshold.status"] = status
 	}
 }
 

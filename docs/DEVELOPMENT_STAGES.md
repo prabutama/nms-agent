@@ -1877,6 +1877,26 @@ Status update:
 - Phase 14K follow-up: API key env naming aligned DONE
 Notes:
 - Standardized ThingsBoard REST API key environment variable to `TB_API_KEY` so site deployments no longer need site-specific variable names in config examples and systemd env files.
+
+2026-06-12 10:30
+Task: Add ThingsBoard alarm trigger from threshold status
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/integrations/thingsboard/models.go
+- internal/integrations/thingsboard/client.go
+- internal/integrations/thingsboard/alarm_manager.go
+- internal/adapters/thingsboard_mqtt_adapter.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- gofmt -w internal/processors/preprocess_threshold_processor.go internal/integrations/thingsboard/models.go internal/integrations/thingsboard/client.go internal/integrations/thingsboard/alarm_manager.go internal/adapters/thingsboard_mqtt_adapter.go
+- go test ./internal/processors ./internal/integrations/thingsboard ./internal/adapters ./internal/config ./internal/routes ./internal/viewer ./cmd/nms-agentctl ./internal/discovery/...
+Status update:
+- Phase 14L follow-up: ThingsBoard alarm lifecycle wiring DONE
+Notes:
+- Threshold processor now injects `threshold.status=normal` for metrics with configured rules so alarms can auto-clear.
+- Added ThingsBoard alarm manager with metric-to-alarm-type mapping and create/clear REST calls.
+- ThingsBoard adapter now processes alarm side-effects after publish alongside relation reconciliation and topology publishing.
 ```
 
 2026-06-05 13:20
