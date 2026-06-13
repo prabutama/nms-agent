@@ -123,6 +123,89 @@ func TestPreprocessThresholdProcessor_RoundsMillisecondsToTwoDecimals(t *testing
 	}
 }
 
+func TestPreprocessThresholdProcessor_DerivesStorageMetrics(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	ts := time.Unix(10, 0).UTC()
+	raw := []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       ts,
+		Fields: map[string]any{
+			"metric":       "snmp.host.storage.allocation_units",
+			"value_type":   "number",
+			"value_number": 1024.0,
+			"tags":         map[string]string{"ifIndex": "65536", "source": "snmp"},
+		},
+	}, {
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       ts,
+		Fields: map[string]any{
+			"metric":       "snmp.host.storage.size_units",
+			"value_type":   "number",
+			"value_number": 524288.0,
+			"tags":         map[string]string{"ifIndex": "65536", "source": "snmp"},
+		},
+	}, {
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       ts,
+		Fields: map[string]any{
+			"metric":       "snmp.host.storage.used_units",
+			"value_type":   "number",
+			"value_number": 222144.0,
+			"tags":         map[string]string{"ifIndex": "65536", "source": "snmp"},
+		},
+	}, {
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       ts,
+		Fields: map[string]any{
+			"metric":       "snmp.host.storage.description",
+			"value_type":   "string",
+			"value_string": "/",
+			"tags":         map[string]string{"ifIndex": "65536", "source": "snmp"},
+		},
+	}, {
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       ts,
+		Fields: map[string]any{
+			"metric":       "snmp.host.storage.type",
+			"value_type":   "string",
+			"value_string": "1.3.6.1.2.1.25.2.1.4",
+			"tags":         map[string]string{"ifIndex": "65536", "source": "snmp"},
+		},
+	}}
+
+	telemetry, err := p.Normalize(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if got, ok := metricValue(telemetry, "snmp.host.storage.total_bytes"); !ok || got != 536870912 {
+		t.Fatalf("expected total_bytes=536870912, got %v ok=%v", got, ok)
+	}
+	if got, ok := metricValue(telemetry, "snmp.host.storage.used_bytes"); !ok || got != 227475456 {
+		t.Fatalf("expected used_bytes=227475456, got %v ok=%v", got, ok)
+	}
+	if got, ok := metricValue(telemetry, "snmp.host.storage.free_bytes"); !ok || got != 309395456 {
+		t.Fatalf("expected free_bytes=309395456, got %v ok=%v", got, ok)
+	}
+	if got, ok := metricValue(telemetry, "snmp.host.storage.used_pct"); !ok || got != 42.37 {
+		t.Fatalf("expected used_pct=42.37, got %v ok=%v", got, ok)
+	}
+	item := findMetric(telemetry, "snmp.host.storage.used_pct")
+	if item == nil {
+		t.Fatalf("expected used_pct metric item")
+	}
+	if item.Tags["storage_description"] != "/" {
+		t.Fatalf("expected storage_description=/, got %q", item.Tags["storage_description"])
+	}
+	if item.Tags["storage_type"] != "1.3.6.1.2.1.25.2.1.4" {
+		t.Fatalf("expected storage_type tag, got %q", item.Tags["storage_type"])
+	}
+}
+
 func TestPreprocessThresholdProcessor_TagsWildcardMatch(t *testing.T) {
 	rules := []models.ThresholdRule{{
 		Metric:   "snmp.if.oper_status",
@@ -1161,6 +1244,15 @@ func metricValue(items []models.Telemetry, metric string) (float64, bool) {
 		return *t.ValueNumber, true
 	}
 	return 0, false
+}
+
+func findMetric(items []models.Telemetry, metric string) *models.Telemetry {
+	for i := range items {
+		if items[i].Metric == metric {
+			return &items[i]
+		}
+	}
+	return nil
 }
 
 func floatPtr(v float64) *float64 {

@@ -2086,4 +2086,23 @@ Status update:
 Notes:
 - Rounded `_ms` metrics to 2 decimals in normalization so latency/jitter telemetry is stable and readable.
 - Percent metrics remain rounded to 2 decimals as well.
+
+2026-06-13 21:00
+Task: Add hrStorage derived metrics for bytes and usage percent
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- docs/DATA_CONTRACT.md
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- gofmt -w internal/processors/preprocess_threshold_processor.go internal/processors/preprocess_threshold_processor_test.go
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 14M follow-up: hrStorage derivation DONE
+Notes:
+- Added derived hrStorage metrics grouped by storage index: `total_bytes`, `used_bytes`, `free_bytes`, and `used_pct`.
+- Preserved storage context via tags `ifIndex`, `storage_description`, and `storage_type`.
 ```

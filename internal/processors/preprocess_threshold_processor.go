@@ -42,6 +42,7 @@ func (p *PreprocessThresholdProcessor) Normalize(ctx context.Context, raw []mode
 
 	telemetry = p.normalizeMetrics(telemetry)
 	telemetry = append(telemetry, deriveMemoryMetrics(telemetry)...)
+	telemetry = append(telemetry, deriveStorageMetrics(telemetry)...)
 
 	for i := range telemetry {
 		t := &telemetry[i]
@@ -304,6 +305,119 @@ func deriveMemoryMetrics(telemetry []models.Telemetry) []models.Telemetry {
 		)
 	}
 	return derived
+}
+
+func deriveStorageMetrics(telemetry []models.Telemetry) []models.Telemetry {
+	type storageEntry struct {
+		ts              time.Time
+		allocationUnits float64
+		sizeUnits       float64
+		usedUnits       float64
+		description     string
+		typeOID         string
+		haveAlloc       bool
+		haveSize        bool
+		haveUsed        bool
+	}
+
+	entries := map[string]*storageEntry{}
+	for _, t := range telemetry {
+		if !strings.HasPrefix(t.Metric, "snmp.host.storage.") {
+			continue
+		}
+		index := strings.TrimSpace(t.Tags["ifIndex"])
+		if index == "" {
+			continue
+		}
+		key := t.DeviceID + "::" + index
+		entry := entries[key]
+		if entry == nil {
+			entry = &storageEntry{ts: t.TS}
+			entries[key] = entry
+		}
+		if t.TS.After(entry.ts) {
+			entry.ts = t.TS
+		}
+		switch t.Metric {
+		case "snmp.host.storage.description":
+			if t.ValueType == "string" && t.ValueString != nil {
+				entry.description = *t.ValueString
+			}
+		case "snmp.host.storage.type":
+			if t.ValueType == "string" && t.ValueString != nil {
+				entry.typeOID = *t.ValueString
+			}
+		case "snmp.host.storage.allocation_units":
+			if t.ValueType == "number" && t.ValueNumber != nil {
+				entry.allocationUnits = *t.ValueNumber
+				entry.haveAlloc = true
+			}
+		case "snmp.host.storage.size_units":
+			if t.ValueType == "number" && t.ValueNumber != nil {
+				entry.sizeUnits = *t.ValueNumber
+				entry.haveSize = true
+			}
+		case "snmp.host.storage.used_units":
+			if t.ValueType == "number" && t.ValueNumber != nil {
+				entry.usedUnits = *t.ValueNumber
+				entry.haveUsed = true
+			}
+		}
+	}
+
+	derived := make([]models.Telemetry, 0, len(entries)*4)
+	for key, entry := range entries {
+		if entry == nil || !entry.haveAlloc || !entry.haveSize || !entry.haveUsed || entry.sizeUnits <= 0 || entry.allocationUnits <= 0 {
+			continue
+		}
+		parts := strings.SplitN(key, "::", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		deviceID := parts[0]
+		index := parts[1]
+		usedUnits := entry.usedUnits
+		if usedUnits < 0 {
+			usedUnits = 0
+		}
+		if usedUnits > entry.sizeUnits {
+			usedUnits = entry.sizeUnits
+		}
+		freeUnits := entry.sizeUnits - usedUnits
+		if freeUnits < 0 {
+			freeUnits = 0
+		}
+		tags := map[string]string{
+			"ifIndex": index,
+			"source":  "snmp",
+		}
+		if entry.description != "" {
+			tags["storage_description"] = entry.description
+		}
+		if entry.typeOID != "" {
+			tags["storage_type"] = entry.typeOID
+		}
+		totalBytes := entry.allocationUnits * entry.sizeUnits
+		usedBytes := entry.allocationUnits * usedUnits
+		freeBytes := entry.allocationUnits * freeUnits
+		usedPct := round2((usedUnits / entry.sizeUnits) * 100)
+		derived = append(derived,
+			numberTelemetry(deviceID, "snmp.host.storage.total_bytes", entry.ts, totalBytes, cloneTagsWithUnit(tags, "bytes")),
+			numberTelemetry(deviceID, "snmp.host.storage.used_bytes", entry.ts, usedBytes, cloneTagsWithUnit(tags, "bytes")),
+			numberTelemetry(deviceID, "snmp.host.storage.free_bytes", entry.ts, freeBytes, cloneTagsWithUnit(tags, "bytes")),
+			numberTelemetry(deviceID, "snmp.host.storage.used_pct", entry.ts, usedPct, cloneTagsWithUnit(tags, "pct")),
+		)
+	}
+	return derived
+}
+
+func cloneTagsWithUnit(tags map[string]string, unit string) map[string]string {
+	out := make(map[string]string, len(tags)+1)
+	for k, v := range tags {
+		out[k] = v
+	}
+	out["unit"] = unit
+	return out
 }
 
 func round2(v float64) float64 {

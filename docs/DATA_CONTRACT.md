@@ -65,6 +65,13 @@ Indexed (tag `ifIndex` is the hrStorage index):
 - snmp.host.storage.size_units
 - snmp.host.storage.used_units
 
+Derived per storage index:
+
+- snmp.host.storage.total_bytes
+- snmp.host.storage.used_bytes
+- snmp.host.storage.free_bytes
+- snmp.host.storage.used_pct
+
 ## Route Inventory Metrics (Phase 14)
 
 Summary metrics:
