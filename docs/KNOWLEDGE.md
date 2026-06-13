@@ -58,6 +58,7 @@
 | `internal/integrations/thingsboard/topology_builder.go` | Builder topology logis IPv4 site-local dari route snapshot canonical: device, subnet, dan external gateway nodes + edges. |
 | `internal/integrations/thingsboard/topology_publisher.go` | Publisher topology site-local ke SERVER_SCOPE attributes asset site hanya saat fingerprint berubah. |
 | `internal/processors/preprocess_threshold_processor.go` | Preprocess SNMP memory metrics dengan derivation `used_kb`/`used_pct` sebelum threshold evaluation dan alarm flow. |
+| `profiles/linux.yml` | Linux SNMP profile untuk telemetry host; memory alert source disederhanakan ke `size_kb`/`free_kb` agar threshold memakai `used_pct`. |
 | `internal/integrations/thingsboard/site_context_test.go` | Unit test validasi site context dan build topology site-local minimal untuk integration layer ThingsBoard. |
 | `internal/adapters/tui_adapter.go` | Adapter TUI: parsing config, start Bubble Tea program, `SendBatch()` inject telemetry via `Program.Send()`, `Close()` quit.                      |
 | `internal/adapters/tui_model.go` | Model TUI: state per-device/per-interface, simpan health ICMP (reachable/latency/jitter/loss), dedup alerts, filter `snmp.if.*`, memory ala `free` (UCD) dengan fallback hrStorage. |

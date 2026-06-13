@@ -2033,4 +2033,21 @@ Status update:
 Notes:
 - Added derived telemetry `snmp.host.memory.used_kb` and `snmp.host.memory.used_pct` from `size_kb` and `free_kb` before threshold evaluation.
 - This keeps memory alarms on `HIGH_MEMORY` while making warning/critical rules evaluate against actual usage percentage.
+
+2026-06-12 19:30
+Task: Make memory thresholds pct-only by removing available_kb source
+Changed files:
+- profiles/linux.yml
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- gofmt -w internal/processors/preprocess_threshold_processor.go internal/processors/preprocess_threshold_processor_test.go
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 14M follow-up: memory threshold source cleanup DONE
+Notes:
+- Removed `snmp.host.memory.available_kb` from the Linux SNMP profile so memory alerting is driven only by derived `snmp.host.memory.used_pct`.
+- This avoids conflicting alerts from a low-available-memory rule while preserving `HIGH_MEMORY` alarms on usage percentage.
 ```
