@@ -2050,4 +2050,22 @@ Status update:
 Notes:
 - Removed `snmp.host.memory.available_kb` from the Linux SNMP profile so memory alerting is driven only by derived `snmp.host.memory.used_pct`.
 - This avoids conflicting alerts from a low-available-memory rule while preserving `HIGH_MEMORY` alarms on usage percentage.
+
+2026-06-13 20:00
+Task: Round derived utilization and memory percentages to 2 decimals
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- gofmt -w internal/processors/preprocess_threshold_processor.go internal/processors/preprocess_threshold_processor_test.go
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 14M follow-up: percentage rounding DONE
+Notes:
+- Rounded derived percentage metrics to 2 decimals before threshold evaluation and telemetry emission.
+- This keeps displayed values stable and prevents noisy float precision in alerts/UI.
 ```

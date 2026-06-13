@@ -82,8 +82,8 @@ func TestPreprocessThresholdProcessor_DerivesMemoryUsage(t *testing.T) {
 	if got, ok := metricValue(telemetry, "snmp.host.memory.used_kb"); !ok || got != 184016 {
 		t.Fatalf("expected used_kb=184016, got %v ok=%v", got, ok)
 	}
-	if got, ok := metricValue(telemetry, "snmp.host.memory.used_pct"); !ok || got < 35.09 || got > 35.11 {
-		t.Fatalf("expected used_pct around 35.10, got %v ok=%v", got, ok)
+	if got, ok := metricValue(telemetry, "snmp.host.memory.used_pct"); !ok || got != 35.1 {
+		t.Fatalf("expected used_pct=35.1, got %v ok=%v", got, ok)
 	}
 }
 
@@ -483,8 +483,8 @@ func TestPreprocessThresholdProcessor_UsesHighSpeedMbpsFallback(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected numeric utilization value")
 	}
-	if val < 0.00007 || val > 0.00009 {
-		t.Fatalf("expected utilization around 0.00008, got %v", val)
+	if val != 0 {
+		t.Fatalf("expected rounded utilization 0, got %v", val)
 	}
 }
 
@@ -549,8 +549,8 @@ func TestPreprocessThresholdProcessor_PrefersSpeedBpsOverHighSpeedMbps(t *testin
 	if !ok {
 		t.Fatalf("expected numeric utilization value")
 	}
-	if val < 0.0007 || val > 0.0009 {
-		t.Fatalf("expected utilization around 0.0008, got %v", val)
+	if val != 0 {
+		t.Fatalf("expected rounded utilization 0, got %v", val)
 	}
 }
 

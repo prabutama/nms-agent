@@ -3,6 +3,7 @@ package processors
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -143,7 +144,7 @@ func (p *PreprocessThresholdProcessor) deriveInterfaceMetrics(telemetry []models
 					}
 				}
 				if speed > 0 {
-					util := (bps / speed) * 100
+					util := round2((bps / speed) * 100)
 					utilTags := baseIfaceTags(cur.tags)
 					utilTags["unit"] = "pct"
 					derived = append(derived, numberTelemetry(key.deviceID, utilMetric, cur.ts, util, utilTags))
@@ -290,7 +291,7 @@ func deriveMemoryMetrics(telemetry []models.Telemetry) []models.Telemetry {
 		if used < 0 {
 			used = 0
 		}
-		usedPct := (used / size) * 100
+		usedPct := round2((used / size) * 100)
 		if usedPct < 0 {
 			usedPct = 0
 		} else if usedPct > 100 {
@@ -303,6 +304,10 @@ func deriveMemoryMetrics(telemetry []models.Telemetry) []models.Telemetry {
 		)
 	}
 	return derived
+}
+
+func round2(v float64) float64 {
+	return math.Round(v*100) / 100
 }
 
 func baseIfaceTags(tags map[string]string) map[string]string {
