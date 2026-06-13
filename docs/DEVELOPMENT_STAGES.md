@@ -2068,4 +2068,22 @@ Status update:
 Notes:
 - Rounded derived percentage metrics to 2 decimals before threshold evaluation and telemetry emission.
 - This keeps displayed values stable and prevents noisy float precision in alerts/UI.
+
+2026-06-13 20:30
+Task: Round ICMP latency/jitter to 2 decimals
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- gofmt -w internal/processors/preprocess_threshold_processor.go internal/processors/preprocess_threshold_processor_test.go
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 14M follow-up: ICMP ms rounding DONE
+Notes:
+- Rounded `_ms` metrics to 2 decimals in normalization so latency/jitter telemetry is stable and readable.
+- Percent metrics remain rounded to 2 decimals as well.
 ```

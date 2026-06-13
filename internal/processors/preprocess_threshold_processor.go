@@ -356,6 +356,7 @@ func (p *PreprocessThresholdProcessor) normalizeMetrics(telemetry []models.Telem
 			} else if val > 100 {
 				val = 100
 			}
+			val = round2(val)
 			if t.Tags["unit"] == "" {
 				t.Tags["unit"] = "pct"
 			}
@@ -364,6 +365,7 @@ func (p *PreprocessThresholdProcessor) normalizeMetrics(telemetry []models.Telem
 			if val < 0 {
 				val = 0
 			}
+			val = round2(val)
 			if t.Tags["unit"] == "" {
 				t.Tags["unit"] = "ms"
 			}

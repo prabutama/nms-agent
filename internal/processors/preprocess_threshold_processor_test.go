@@ -87,6 +87,42 @@ func TestPreprocessThresholdProcessor_DerivesMemoryUsage(t *testing.T) {
 	}
 }
 
+func TestPreprocessThresholdProcessor_RoundsMillisecondsToTwoDecimals(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	raw := []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "icmp",
+		TS:       time.Now().UTC(),
+		Fields: map[string]any{
+			"metric":       "icmp.latency_ms",
+			"value_type":   "number",
+			"value_number": 0.3175,
+			"unit":         "ms",
+		},
+	}, {
+		DeviceID: "d1",
+		Source:   "icmp",
+		TS:       time.Now().UTC(),
+		Fields: map[string]any{
+			"metric":       "icmp.jitter_ms",
+			"value_type":   "number",
+			"value_number": 0.07699999999999996,
+			"unit":         "ms",
+		},
+	}}
+
+	telemetry, err := p.Normalize(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if got, ok := metricValue(telemetry, "icmp.latency_ms"); !ok || got != 0.32 {
+		t.Fatalf("expected latency_ms=0.32, got %v ok=%v", got, ok)
+	}
+	if got, ok := metricValue(telemetry, "icmp.jitter_ms"); !ok || got != 0.08 {
+		t.Fatalf("expected jitter_ms=0.08, got %v ok=%v", got, ok)
+	}
+}
+
 func TestPreprocessThresholdProcessor_TagsWildcardMatch(t *testing.T) {
 	rules := []models.ThresholdRule{{
 		Metric:   "snmp.if.oper_status",
