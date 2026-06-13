@@ -45,6 +45,48 @@ func TestPreprocessThresholdProcessor_AddsThresholdTags(t *testing.T) {
 	}
 }
 
+func TestPreprocessThresholdProcessor_DerivesMemoryUsage(t *testing.T) {
+	p := PreprocessThresholdProcessor{}
+	raw := []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(10, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.host.memory.size_kb",
+			"value_type":   "number",
+			"value_number": 524288.0,
+			"tags":         map[string]string{"source": "snmp"},
+		},
+	}, {
+		DeviceID: "d1",
+		Source:   "snmp",
+		TS:       time.Unix(10, 0).UTC(),
+		Fields: map[string]any{
+			"metric":       "snmp.host.memory.free_kb",
+			"value_type":   "number",
+			"value_number": 340272.0,
+			"tags":         map[string]string{"source": "snmp"},
+		},
+	}}
+
+	telemetry, err := p.Normalize(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if !hasMetric(telemetry, "snmp.host.memory.used_kb") {
+		t.Fatalf("expected used_kb derived metric")
+	}
+	if !hasMetric(telemetry, "snmp.host.memory.used_pct") {
+		t.Fatalf("expected used_pct derived metric")
+	}
+	if got, ok := metricValue(telemetry, "snmp.host.memory.used_kb"); !ok || got != 184016 {
+		t.Fatalf("expected used_kb=184016, got %v ok=%v", got, ok)
+	}
+	if got, ok := metricValue(telemetry, "snmp.host.memory.used_pct"); !ok || got < 35.09 || got > 35.11 {
+		t.Fatalf("expected used_pct around 35.10, got %v ok=%v", got, ok)
+	}
+}
+
 func TestPreprocessThresholdProcessor_TagsWildcardMatch(t *testing.T) {
 	rules := []models.ThresholdRule{{
 		Metric:   "snmp.if.oper_status",
@@ -69,6 +111,9 @@ func TestPreprocessThresholdProcessor_TagsWildcardMatch(t *testing.T) {
 	telemetry, err := p.Normalize(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("Normalize: %v", err)
+	}
+	if len(telemetry) == 0 {
+		t.Fatalf("expected telemetry items")
 	}
 	if telemetry[0].Tags["threshold.status"] != "warning" {
 		t.Fatalf("expected threshold.status=warning, got %q", telemetry[0].Tags["threshold.status"])

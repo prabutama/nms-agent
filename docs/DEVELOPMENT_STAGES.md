@@ -2015,4 +2015,22 @@ Status update:
 Notes:
 - Added `PropagateToTenant` and `PropagateRelationTypes` to `AlarmRequest`.
 - Default nms-agent alarms now propagate to tenant and owner with relation type `Contains` for customer visibility.
+
+2026-06-12 19:00
+Task: Derive SNMP memory usage percentage for threshold alarms
+Changed files:
+- internal/processors/preprocess_threshold_processor.go
+- internal/processors/preprocess_threshold_processor_test.go
+- docs/KNOWLEDGE.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- gofmt -w internal/processors/preprocess_threshold_processor.go internal/processors/preprocess_threshold_processor_test.go
+- make fmt
+- make test
+- make build
+Status update:
+- Phase 14M: SNMP memory usage derivation DONE
+Notes:
+- Added derived telemetry `snmp.host.memory.used_kb` and `snmp.host.memory.used_pct` from `size_kb` and `free_kb` before threshold evaluation.
+- This keeps memory alarms on `HIGH_MEMORY` while making warning/critical rules evaluate against actual usage percentage.
 ```

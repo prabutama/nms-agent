@@ -40,6 +40,7 @@ func (p *PreprocessThresholdProcessor) Normalize(ctx context.Context, raw []mode
 	telemetry = p.filterPhysicalInterfaces(telemetry)
 
 	telemetry = p.normalizeMetrics(telemetry)
+	telemetry = append(telemetry, deriveMemoryMetrics(telemetry)...)
 
 	for i := range telemetry {
 		t := &telemetry[i]
@@ -256,6 +257,52 @@ func counterDirection(metric string) (string, int) {
 	default:
 		return "", 0
 	}
+}
+
+func deriveMemoryMetrics(telemetry []models.Telemetry) []models.Telemetry {
+	byDevice := map[string]map[string]float64{}
+	for _, t := range telemetry {
+		if t.ValueType != "number" || t.ValueNumber == nil {
+			continue
+		}
+		if !strings.HasPrefix(t.Metric, "snmp.host.memory.") {
+			continue
+		}
+		deviceMetrics := byDevice[t.DeviceID]
+		if deviceMetrics == nil {
+			deviceMetrics = map[string]float64{}
+			byDevice[t.DeviceID] = deviceMetrics
+		}
+		deviceMetrics[t.Metric] = *t.ValueNumber
+	}
+
+	derived := make([]models.Telemetry, 0, len(byDevice)*2)
+	for deviceID, metrics := range byDevice {
+		size, ok := metrics["snmp.host.memory.size_kb"]
+		if !ok || size <= 0 {
+			continue
+		}
+		free, ok := metrics["snmp.host.memory.free_kb"]
+		if !ok {
+			continue
+		}
+		used := size - free
+		if used < 0 {
+			used = 0
+		}
+		usedPct := (used / size) * 100
+		if usedPct < 0 {
+			usedPct = 0
+		} else if usedPct > 100 {
+			usedPct = 100
+		}
+		ts := time.Now().UTC()
+		derived = append(derived,
+			numberTelemetry(deviceID, "snmp.host.memory.used_kb", ts, used, map[string]string{"source": "snmp", "unit": "kb"}),
+			numberTelemetry(deviceID, "snmp.host.memory.used_pct", ts, usedPct, map[string]string{"source": "snmp", "unit": "pct"}),
+		)
+	}
+	return derived
 }
 
 func baseIfaceTags(tags map[string]string) map[string]string {
