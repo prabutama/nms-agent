@@ -15,9 +15,6 @@ import (
 	"nms-agent/internal/config"
 	"nms-agent/internal/configwatch"
 	"nms-agent/internal/core"
-	"nms-agent/internal/discovery"
-	discoveryexplorer "nms-agent/internal/discovery/explorer"
-	discoveryproviders "nms-agent/internal/discovery/providers"
 	"nms-agent/internal/models"
 	"nms-agent/internal/processors"
 	"nms-agent/internal/profiles"
@@ -184,7 +181,6 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
 	}
-	discoverySvc := newDiscoveryService(loaded)
 
 	reloadCh := make(chan os.Signal, 1)
 	if sigs := reloadSignals(); len(sigs) > 0 {
@@ -212,17 +208,6 @@ func run(args []string) int {
 	pollInterval := loaded.Root.Agent.PollInterval
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
-	var discoveryTicker *time.Ticker
-	var discoveryCh <-chan time.Time
-	if loaded.Root.Discovery.Enabled {
-		discoveryTicker = time.NewTicker(loaded.Root.Discovery.Interval)
-		discoveryCh = discoveryTicker.C
-	}
-	defer func() {
-		if discoveryTicker != nil {
-			discoveryTicker.Stop()
-		}
-	}()
 	reloadPipeline := func(newLoaded config.Loaded) bool {
 		loc, err := config.LoadLocation(newLoaded.Root.Agent.Output.Timezone)
 		if err != nil {
@@ -245,16 +230,6 @@ func run(args []string) int {
 			ticker.Stop()
 			ticker = time.NewTicker(pollInterval)
 		}
-		if discoveryTicker != nil {
-			discoveryTicker.Stop()
-			discoveryTicker = nil
-			discoveryCh = nil
-		}
-		if newLoaded.Root.Discovery.Enabled {
-			discoveryTicker = time.NewTicker(newLoaded.Root.Discovery.Interval)
-			discoveryCh = discoveryTicker.C
-		}
-		discoverySvc = newDiscoveryService(newLoaded)
 		newWatcherPath := config.ResolvePath(filepath.Dir(configAbs), newLoaded.Root.Paths.DevicesDir)
 		if newWatcherPath != watcherPath {
 			if devicesWatcher != nil {
@@ -312,37 +287,9 @@ func run(args []string) int {
 				fmt.Fprintf(os.Stdout, "devices watcher reloaded config: devices=%d adapter.active=%s\n", len(loaded.Devices), loaded.Adapters.Adapters.Active)
 			}
 			continue
-		case <-discoveryCh:
-			res, err := discoverySvc.RunOnce(ctx, configAbs, loaded)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "discovery failed: %v\n", err)
-				continue
-			}
-			if res.CandidatesFound > 0 || res.ExistingSkipped > 0 || res.Promoted > 0 || len(res.SkippedReasons) > 0 {
-				fmt.Fprintf(os.Stdout, "discovery: candidates=%d existing_skipped=%d snmp_ok=%d profile_matched=%d promoted=%d\n", res.CandidatesFound, res.ExistingSkipped, res.SNMPOK, res.ProfileMatched, res.Promoted)
-			}
-			if res.Changed {
-				newLoaded, err := config.LoadFromFile(configAbs)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "discovery reload failed: %v\n", err)
-					continue
-				}
-				if err := config.Validate(newLoaded); err != nil {
-					fmt.Fprintf(os.Stderr, "discovery reload failed: %v\n", err)
-					continue
-				}
-				if reloadPipeline(newLoaded) {
-					fmt.Fprintf(os.Stdout, "discovery reloaded config: devices=%d adapter.active=%s\n", len(loaded.Devices), loaded.Adapters.Adapters.Active)
-				}
-			}
-			continue
 		case <-ticker.C:
 		}
 	}
-}
-
-func newDiscoveryService(loaded config.Loaded) discovery.Service {
-	return discovery.Service{Provider: discoveryproviders.New(loaded), Prober: discovery.SNMPProber{}, Explorer: discoveryexplorer.Explorer{}}
 }
 
 func buildCollector(mode string, loaded config.Loaded) (collectors.Collector, error) {

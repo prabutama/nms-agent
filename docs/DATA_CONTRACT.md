@@ -55,6 +55,11 @@ Optional Linux/Proxmox (UCD-SNMP-MIB) memory breakdown (all in kB):
 - snmp.host.swap.total_kb
 - snmp.host.swap.free_kb
 
+Derived memory metrics:
+
+- snmp.host.memory.used_kb
+- snmp.host.memory.used_pct
+
 ## Host Storage Metrics (hrStorage, Phase 6)
 
 Indexed (tag `ifIndex` is the hrStorage index):
@@ -141,7 +146,7 @@ Normalization diterapkan setelah derived metrics, sebelum threshold evaluation. 
 | Bits per detik | `*_bps` | `≥ 0` | `bps` |
 | Reachability | `icmp.reachable` | `0` atau `1` | — |
 
-Unit default hanya diisi jika tag `unit` belum ada.
+Unit default hanya diisi jika tag `unit` belum ada. Metric `*_pct` dan `*_ms` juga dibulatkan ke 2 desimal sebelum threshold evaluation dan adapter output.
 
 ## Metric Value Types
 

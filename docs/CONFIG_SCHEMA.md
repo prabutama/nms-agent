@@ -31,43 +31,6 @@ paths:
   thresholds_file: thresholds.yml
   adapters_file: adapters.yml
   queue_db: data/queue/queue.db
-
-discovery:
-  enabled: false
-  interval: 10m
-  interface: eth0
-  subnet: 192.168.10.0/24
-  provider: netlink
-
-  active_probe:
-    timeout: 1s
-    concurrency: 64
-
-  snmp:
-    version: v2c
-    community: ${SNMP_COMMUNITY}
-    timeout: 2s
-    retries: 1
-    concurrency: 32
-
-  auto_promote:
-    enabled: true
-    require_snmp_ok: true
-    require_sys_object_id: true
-    require_profile_match: true
-    max_new_devices_per_cycle: 10
-    device_id_template: "{{vendor}}-{{sys_name}}"
-    write_to: devices.d
-
-  exploration:
-    enabled: true
-    run_when: no_profile_match
-    safe_only: true
-    auto_approve_generated_profile: true
-    auto_promote_after_generate: true
-    max_oids_per_device: 300
-    timeout: 3s
-    output_dir: profiles
 ```
 
 Notes:
@@ -82,16 +45,22 @@ Notes:
 - `paths.*` may be relative to the directory containing `agent.yml`.
 - `${ENV_VAR}` expansion is supported for path strings via the current process environment.
 - `paths.queue_db` is the SQLite DB file path for the local durable queue. Its parent directory is created at runtime if missing.
-- `discovery.*` is optional. Discovery supports passive `netlink` candidates and active ICMP subnet probing via `active`.
-- `discovery.interface` is the local network interface name on the gateway host (for example `eth0`, `ens18`, `br-lan`).
-- `discovery.subnet` filters candidates to a single target CIDR.
-- `discovery.provider` supports:
+- Discovery is manual-only. `agent.yml` does not require or store discovery configuration for daemon runtime.
+- Discovery is executed only through `nms-agentctl discovery preview --subnet <CIDR>` and `nms-agentctl discovery run --subnet <CIDR>`.
+- Running preview/run is explicit consent; manual discovery does not depend on `discovery.enabled`.
+- The CLI auto-detects the local interface when `--interface` is omitted. If auto-detection fails, pass `--interface` explicitly.
+- `--provider` supports:
   - `netlink`: passive Linux neighbor/ARP discovery. Host biasanya baru terlihat setelah ada traffic/ARP entry.
   - `active`: active ICMP probe ke seluruh host dalam subnet agar candidate baru bisa muncul tanpa ping manual terlebih dahulu.
-- `discovery.active_probe.timeout` membatasi satu ICMP probe per host (default `1s`).
-- `discovery.active_probe.concurrency` mengatur jumlah probe ICMP paralel (default `64`).
-- `discovery.snmp.community` supports `${ENV_VAR}` expansion through the current process environment.
-- `discovery.exploration.*` is active in Milestone B using a static safe OID catalog (system, interfaces, host-resources). It is not a full arbitrary-tree SNMP walk.
+- Active probe defaults: `timeout=1s`, `concurrency=64`.
+- SNMP probe defaults: `version=v2c`, `community=public` when not provided, `timeout=2s`, `retries=1`, `concurrency=4`.
+- `--snmp-community` supports `${ENV_VAR}` expansion.
+- Manual discovery always requires SNMP OK, `sysObjectID`, and a known profile match before promotion.
+- SNMP probe errors are reported as `SNMP_PROBE_FAILED` and never promote a device.
+- `--max-new-devices`: `0` or omitted uses default `50`, positive values set an explicit limit, `-1` means unlimited.
+- If SNMP community is missing, CLI prints a warning and continues with the default public community.
+- Unknown profile matches are skipped with a warning and do not write `devices.d`.
+- Known profile matches are promoted to `devices.d` with `0600` file permission.
 - Perubahan file `devices.d/*.yml` sekarang dipantau daemon; jika file device ditambah/diubah/dihapus dan config valid, runtime akan reload otomatis tanpa restart service.
 
 ## configs/devices.d/*.yml
@@ -197,7 +166,7 @@ adapters:
   - Adapter publishes payload grouped by device and timestamp in ThingsBoard-style `{"device":[{"ts":...,"values":{...}}]}` format.
   - Adapter will publish metric value plus metadata keys: `<metric>__value_type` and `<metric>__tags` (includes threshold tags like `threshold.status`).
   - In `gateway` mode this payload is intended to be consumed by a ThingsBoard Gateway MQTT connector with a thin/pass-through custom converter.
-  - Jalur hybrid management memakai REST API untuk relation `ASSET(site) --Contains--> DEVICE` dan publish topology snapshot ke `SERVER_SCOPE` attribute asset site. Gagal pada jalur management tidak boleh mematikan telemetry utama.
+  - Jalur hybrid management memakai REST API tenant-scope untuk relation `ASSET(site) --Contains--> DEVICE`, publish topology snapshot ke `SERVER_SCOPE` attribute asset site, serta alarm create/clear/assign. Gagal pada jalur management tidak boleh mematikan telemetry utama.
 
 Example:
 

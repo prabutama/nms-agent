@@ -2105,4 +2105,30 @@ Status update:
 Notes:
 - Added derived hrStorage metrics grouped by storage index: `total_bytes`, `used_bytes`, `free_bytes`, and `used_pct`.
 - Preserved storage context via tags `ifIndex`, `storage_description`, and `storage_type`.
+
+2026-06-15 00:00
+Task: Harden manual-only discovery
+Changed files:
+- cmd/nms-agentctl/discover.go
+- cmd/nms-agentctl/discover_test.go
+- internal/discovery/service.go
+- internal/discovery/snmp_probe.go
+- internal/discovery/service_test.go
+- docs/CONFIG_SCHEMA.md
+- docs/CLI_COMMANDS.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test -count=1 ./internal/discovery ./cmd/nms-agentctl ./internal/config
+- make fmt
+- make test
+- make vet
+- make build
+Status update:
+- Manual discovery hardening DONE
+Notes:
+- Manual discovery no longer depends on `discovery.enabled` in config.
+- SNMP probe errors are reported as `SNMP_PROBE_FAILED` and skipped before profile matching or promotion.
+- Promotion limit semantics: `0=default 50`, `>0=explicit limit`, `-1=unlimited`.
+- CLI expands environment variables in `--snmp-community`, exposes `--max-new-devices`, and keeps safe onboarding requirements forced on.
+- Added direct tests for CLI overrides, provider validation, interface auto-detect error paths, firstUsableHost /31 and /32, probe errors, empty fingerprint skip, and max-device limit normalization.
 ```

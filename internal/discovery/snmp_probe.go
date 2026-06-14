@@ -49,7 +49,7 @@ func (p SNMPProber) Probe(ctx context.Context, candidate Candidate, cfg config.D
 		Retries:   retries,
 	}
 	if err := client.Connect(); err != nil {
-		return fp, nil
+		return fp, err
 	}
 	defer func() {
 		if client.Conn != nil {
@@ -58,7 +58,7 @@ func (p SNMPProber) Probe(ctx context.Context, candidate Candidate, cfg config.D
 	}()
 	pkt, err := client.Get([]string{oidSysObjectID, oidSysName, oidSysDescr})
 	if err != nil {
-		return fp, nil
+		return fp, err
 	}
 	fp.SNMPOK = true
 	for _, v := range pkt.Variables {

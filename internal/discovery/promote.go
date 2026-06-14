@@ -70,7 +70,7 @@ func writePromotedDevice(baseDir string, loaded config.Loaded, fp Fingerprint, u
 		return "", err
 	}
 	tmpPath := filepath.Join(writeDir, fmt.Sprintf(".%s.%d.tmp", deviceID, time.Now().UnixNano()))
-	if err := os.WriteFile(tmpPath, b, 0o644); err != nil {
+	if err := os.WriteFile(tmpPath, b, 0o600); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmpPath, path); err != nil {

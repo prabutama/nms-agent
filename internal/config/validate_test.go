@@ -61,7 +61,7 @@ func TestValidate_DeviceAddressWithHiddenChars(t *testing.T) {
 	}
 }
 
-func TestValidate_DiscoveryEnabledValid(t *testing.T) {
+func TestValidate_IgnoresDiscoveryBlockForDaemonConfig(t *testing.T) {
 	community := "public"
 	t.Setenv("SNMP_COMMUNITY", community)
 	cfg := Loaded{
@@ -70,7 +70,6 @@ func TestValidate_DiscoveryEnabledValid(t *testing.T) {
 			Paths: Paths{DevicesDir: "x", ThresholdsFile: "y", AdaptersFile: "z", QueueDB: "q.db"},
 			Discovery: Discovery{
 				Enabled:   true,
-				Interval:  10 * time.Minute,
 				Interface: "eth0",
 				Subnet:    "192.168.10.0/24",
 				Provider:  "netlink",
@@ -103,14 +102,13 @@ func TestValidate_DiscoveryEnabledValid(t *testing.T) {
 	}
 }
 
-func TestValidate_DiscoveryEnabledInvalid(t *testing.T) {
+func TestValidate_DiscoveryBlockIsOptionalAndNotRuntimeValidated(t *testing.T) {
 	cfg := Loaded{
 		Root: Root{
 			Agent: Agent{PollInterval: time.Second},
 			Paths: Paths{DevicesDir: "x", ThresholdsFile: "y", AdaptersFile: "z", QueueDB: "q.db"},
 			Discovery: Discovery{
 				Enabled:   true,
-				Interval:  0,
 				Interface: "",
 				Subnet:    "bad-subnet",
 				Provider:  "other",
@@ -133,7 +131,7 @@ func TestValidate_DiscoveryEnabledInvalid(t *testing.T) {
 		Devices:  []Device{{ID: "d1", Address: "127.0.0.1"}},
 		Adapters: AdaptersConfig{Adapters: AdaptersSection{Active: "tui", Configs: map[string]any{}}},
 	}
-	if err := Validate(cfg); err == nil {
-		t.Fatalf("expected error")
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
 	}
 }

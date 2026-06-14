@@ -5,52 +5,58 @@ flowchart TD
     B --> B1[validate config]
     B --> B2[queue status]
     B --> B3[queue retry]
+    B --> B4[view / discover]
 
     B1 --> D[Config Loader]
     B2 --> D
     B3 --> D
+    B4 --> D
 
     C --> D[Config Loader]
     D --> E[agent.yml]
     D --> F[devices.d/*.yml]
     D --> G[adapters.yml]
     D --> H[thresholds.yml]
+    D --> I[profiles/*.yml]
 
-    D --> I[Config Validator]
-    I -->|valid| J[Pipeline Runtime]
-    I -->|invalid| X[Exit with Error]
+    D --> J[Config Validator]
+    J -->|valid| K[Pipeline Runtime]
+    J -->|invalid| X[Exit with Error]
 
     subgraph Pipeline[Agent Pipeline]
-        J --> K[Collector Selection\n(--collector-mode)]
-        K --> K1[Dummy Collector]
-        K --> K2[ICMP Collector]
-        K --> K3[SNMP Collector]
-        K1 --> L[Raw Sample]
-        K2 --> L
-        K3 --> L
-        L --> M[Preprocess + Threshold Processor]
-        M --> N[Canonical Telemetry]
-        N --> O[Enqueue Telemetry]
-        O --> Q[(SQLite Queue DB)]
-        Q --> P[PendingBatch]
-        P --> R[Terminal Adapter]
-        R -->|send success| S[MarkDelivered]
-        R -->|send failed| T[MarkFailed + retry_count]
-        S --> Q
+        K --> L[Collector Selection\n(--collector-mode)]
+        L --> L1[Dummy Collector]
+        L --> L2[ICMP Collector]
+        L --> L3[SNMP Collector]
+        L1 --> M[Raw Samples]
+        L2 --> M
+        L3 --> M
+        M --> N[Preprocess + Normalize]
+        N --> N1[Derived metrics\nif utilization\nmemory used_pct\nstorage used_pct/bytes]
+        N1 --> O[Canonical Telemetry]
+        O --> P[Enqueue Telemetry]
+        P --> Q[(SQLite Queue DB)]
+        Q --> R[PendingBatch]
+        R --> S[Active Adapter\nTUI / Generic MQTT / ThingsBoard MQTT]
+        S -->|send success| T[MarkDelivered]
+        S -->|send failed| U[MarkFailed + retry_count]
         T --> Q
+        U --> Q
     end
 
-    R --> U[Terminal Output]
+    subgraph ThingsBoardHybrid[ThingsBoard Hybrid Side Effects]
+        S --> V[Relation reconcile]
+        S --> W[Topology publish]
+        S --> Y[Alarm create / clear]
+    end
 
-    I -->|valid| Q
+    S --> Z[Adapter Output]
+
+    J -->|valid| Q
 
     Q --> B2
-    B2 --> V[Queue Summary]
-    V --> A
+    B2 --> AA[Queue Summary]
+    AA --> A
 
-    B3 --> P2[PendingBatch]
-    P2 --> R
-    R -->|send success| S2[MarkDelivered]
-    R -->|send failed| T2[MarkFailed + retry_count]
-    S2 --> Q
-    T2 --> Q
+    B3 --> AB[PendingBatch]
+    AB --> S

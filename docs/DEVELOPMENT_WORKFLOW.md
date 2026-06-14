@@ -15,12 +15,5 @@
 1. Plan the task.
 2. Identify relevant files.
 3. Implement small changes.
-4. Run validation commands.
-5. Summarize changed files, test results, and risks.
-
-## Validation Commands
-
-- make fmt 
-- make test 
-- make vet 
-- make build 
+4. Remind user to run `make check`.
+5. Summarize changed files and risks.

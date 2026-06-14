@@ -1,38 +1,32 @@
-## Architecture Rules
+# NMS Agent
 
-The agent follows this strict flow:
+A Go agent deployed per site. It polls network devices via SNMP/ICMP, stores
+data in local SQLite, then sends to any monitoring platform (ThingsBoard, MQTT,
+TUI) through pluggable adapters.
 
-`collect → preprocess → normalize → queue → adapter send`
+## Core Flow
 
-Core logic must stay platform-agnostic. Do not add direct dependencies on ThingsBoard, Zabbix, Prometheus, or other platforms inside collectors, processors, queue, scheduler, or models.
+```
+Collect (SNMP/ICMP) → Preprocess & Normalize → Queue (SQLite) → Adapter Send
+```
 
-All platform-specific behavior must live inside adapters.
-
-Collectors and device profiles only gather raw device data. Core services validate, preprocess, and normalize it into canonical telemetry. Telemetry must be persisted to the local queue before sending. If adapter delivery fails, the data remains pending for retry.
-
-Update docs/KNOWLEDGE.md after file changes
----
-Update `docs/KNOWLEDGE.md`.
-
-Task:
-$ARGUMENTS
-
-Rules:
-- Only update the table "FILE KNOWLEDGE TABLE".
-- Add new files that are not documented yet.
-- Update moved, renamed, or deleted files.
-- Keep descriptions short and clear.
-- Explain each file's role in the agent architecture.
-- Do not modify source code.    
+Each stage is a Go interface: `collectors.Collector`, `processors.Processor`,
+`queue.Queue`, `adapters.Adapter`. Telemetry must hit the queue before send.
+Failed deliveries stay pending for retry.
 
 
-## Development Status Rules
+Windows: use `make.bat` instead. No CGO (uses `modernc.org/sqlite`).
 
-Every implementation task must update `docs/DEVELOPMENT_STAGES.md`.
+## Deeper Docs
 
-The agent must:
-- update the relevant task status;
-- add a new entry to the Development Log;
-- list validation commands that were run;
-- avoid marking a task as DONE unless build/test succeeds;
-- update `docs/KNOWLEDGE.md` when new files are created, renamed, moved, or deleted.
+| File | Covers |
+|---|---|
+| `docs/AI_CONTEXT.md` | What to read per task type |
+| `docs/ARCHITECTURE.md` | Hexagonal design rules |
+| `docs/DATA_CONTRACT.md` | Canonical telemetry format |
+| `docs/ADAPTER_CONTRACT.md` | Adapter interface rules |
+| `docs/QUEUE_DESIGN.md` | SQLite queue data model |
+| `docs/CONFIG_SCHEMA.md` | YAML config reference |
+| `docs/DEVICE_PROFILE.md` | SNMP profile YAML schema |
+| `docs/CLI_COMMANDS.md` | All nms-agentctl commands |
+| `docs/DEVELOPMENT_WORKFLOW.md` | Dev flow and conventions |

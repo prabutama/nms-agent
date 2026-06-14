@@ -8,11 +8,15 @@ Read:
 - docs/DATA_CONTRACT.md
 - internal/queue/*
 
-## For adapter tasks
+## For adapter tasks — development, refactor, or adding a new adapter
 Read:
 - docs/ADAPTER_CONTRACT.md
 - docs/DATA_CONTRACT.md
-- internal/adapters/*
+- internal/adapters/base/port.go
+- internal/adapters/base/format.go
+- internal/adapters/base/output_timezone.go
+- internal/adapters/factory.go
+- internal/adapters/<closest-existing-adapter>/adapter.go
 
 ## For config or CLI tasks
 Read:

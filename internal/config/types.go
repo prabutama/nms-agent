@@ -65,7 +65,6 @@ type Paths struct {
 
 type Discovery struct {
 	Enabled     bool                 `yaml:"enabled"`
-	Interval    time.Duration        `yaml:"interval"`
 	Interface   string               `yaml:"interface"`
 	Subnet      string               `yaml:"subnet"`
 	Provider    string               `yaml:"provider"`

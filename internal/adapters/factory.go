@@ -1,17 +1,21 @@
 package adapters
 
-import "fmt"
+import (
+	"fmt"
 
-// NewAdapter returns an adapter implementation selected by name.
-// config is adapter-specific (e.g., TUI options).
+	"nms-agent/internal/adapters/generic_mqtt"
+	"nms-agent/internal/adapters/thingsboard_mqtt"
+	"nms-agent/internal/adapters/tui"
+)
+
 func NewAdapter(name string, config map[string]any) (Adapter, error) {
 	switch name {
 	case "tui":
-		return NewTUIAdapter(config)
+		return tui.NewAdapter(config)
 	case "generic_mqtt":
-		return NewGenericMQTTAdapter(config)
+		return genericmqtt.NewAdapter(config)
 	case "thingsboard_mqtt":
-		return NewThingsBoardMQTTAdapter(config)
+		return thingsboardmqtt.NewAdapter(config)
 	default:
 		return nil, fmt.Errorf("unknown adapter %q (supported: tui, generic_mqtt, thingsboard_mqtt)", name)
 	}

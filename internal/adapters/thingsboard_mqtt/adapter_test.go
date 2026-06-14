@@ -1,0 +1,200 @@
+package thingsboardmqtt
+
+import (
+	"encoding/json"
+	"errors"
+	"testing"
+	"time"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
+
+	"nms-agent/internal/models"
+)
+
+type fakeTBMQTTClient struct {
+	connected bool
+	open      bool
+
+	connectToken mqtt.Token
+	publishToken mqtt.Token
+	publishes    []publishCall
+}
+
+type publishCall struct {
+	topic    string
+	qos      byte
+	retained bool
+	payload  []byte
+}
+
+func newFakeTBMQTTClient(connected, open bool) *fakeTBMQTTClient {
+	return &fakeTBMQTTClient{
+		connected:    connected,
+		open:         open,
+		connectToken: &fakeTBToken{waitOK: true},
+		publishToken: &fakeTBToken{waitOK: true},
+	}
+}
+
+func (c *fakeTBMQTTClient) IsConnected() bool      { return c.connected }
+func (c *fakeTBMQTTClient) IsConnectionOpen() bool { return c.open }
+func (c *fakeTBMQTTClient) Connect() mqtt.Token    { return c.connectToken }
+func (c *fakeTBMQTTClient) Publish(topic string, qos byte, retained bool, payload interface{}) mqtt.Token {
+	raw, _ := payload.([]byte)
+	c.publishes = append(c.publishes, publishCall{topic: topic, qos: qos, retained: retained, payload: raw})
+	return c.publishToken
+}
+func (c *fakeTBMQTTClient) Disconnect(quiesce uint) {}
+
+type fakeTBToken struct {
+	err    error
+	waitOK bool
+	done   chan struct{}
+}
+
+func (t *fakeTBToken) Wait() bool                     { return t.waitOK }
+func (t *fakeTBToken) WaitTimeout(time.Duration) bool { return t.waitOK }
+func (t *fakeTBToken) Done() <-chan struct{}          { return t.done }
+func (t *fakeTBToken) Error() error                   { return t.err }
+
+func TestThingsBoardMQTTAdapter_DirectMode(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	a := &ThingsBoardMQTTAdapter{
+		cfg:    thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
+		client: fake,
+	}
+	batch := []models.Telemetry{
+		{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()},
+	}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(fake.publishes) != 1 {
+		t.Fatalf("expected 1 publish, got %d", len(fake.publishes))
+	}
+	var payload map[string][]tbGatewayTelemetry
+	if err := json.Unmarshal(fake.publishes[0].payload, &payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	entries, ok := payload["d1"]
+	if !ok {
+		t.Fatalf("expected device d1 in payload")
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].TS <= 0 {
+		t.Fatalf("expected valid timestamp")
+	}
+	v, ok := entries[0].Values["test.metric"]
+	if !ok {
+		t.Fatalf("expected test.metric in values")
+	}
+	if v.(float64) != 42 {
+		t.Fatalf("expected 42, got %v", v)
+	}
+}
+
+func TestThingsBoardMQTTAdapter_MultipleDevices(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	a := &ThingsBoardMQTTAdapter{
+		cfg:    thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
+		client: fake,
+	}
+	now := time.Now().UTC()
+	batch := []models.Telemetry{
+		{DeviceID: "d1", Metric: "cpu", ValueType: "number", ValueNumber: floatPtr(50), TS: now},
+		{DeviceID: "d2", Metric: "mem", ValueType: "number", ValueNumber: floatPtr(1024), TS: now},
+	}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(fake.publishes) != 1 {
+		t.Fatalf("expected 1 publish, got %d", len(fake.publishes))
+	}
+	var payload map[string][]tbGatewayTelemetry
+	if err := json.Unmarshal(fake.publishes[0].payload, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(payload) != 2 {
+		t.Fatalf("expected 2 devices, got %d", len(payload))
+	}
+}
+
+func TestThingsBoardMQTTAdapter_ConnectError(t *testing.T) {
+	fake := newFakeTBMQTTClient(false, false)
+	fake.connectToken = &fakeTBToken{waitOK: true, err: errors.New("connection refused")}
+	a := &ThingsBoardMQTTAdapter{
+		cfg:    thingsboardMQTTConfig{Mode: "direct", AccessToken: "test", BrokerURL: "tcp://127.0.0.1:1883"},
+		client: fake,
+	}
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "m", ValueType: "number", ValueNumber: floatPtr(1), TS: time.Now().UTC()}}
+	if err := a.SendBatch(nil, batch); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_StrictQueueNotConnected(t *testing.T) {
+	fake := newFakeTBMQTTClient(false, false)
+	a := &ThingsBoardMQTTAdapter{
+		cfg: thingsboardMQTTConfig{
+			Mode:        "direct",
+			AccessToken: "test",
+			BrokerURL:   "tcp://127.0.0.1:1883",
+			StrictQueue: true,
+		},
+		client: fake,
+	}
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "m", ValueType: "number", ValueNumber: floatPtr(1), TS: time.Now().UTC()}}
+	if err := a.SendBatch(nil, batch); err == nil {
+		t.Fatalf("expected error in strict mode")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_HealthCheck(t *testing.T) {
+	t.Run("connected", func(t *testing.T) {
+		a := &ThingsBoardMQTTAdapter{
+			cfg:    thingsboardMQTTConfig{},
+			client: newFakeTBMQTTClient(true, true),
+		}
+		if err := a.HealthCheck(nil); err != nil {
+			t.Fatalf("expected ok, got: %v", err)
+		}
+	})
+	t.Run("disconnected", func(t *testing.T) {
+		a := &ThingsBoardMQTTAdapter{
+			cfg:    thingsboardMQTTConfig{},
+			client: newFakeTBMQTTClient(false, false),
+		}
+		if err := a.HealthCheck(nil); err == nil {
+			t.Fatalf("expected error")
+		}
+	})
+}
+
+func TestThingsBoardMQTTAdapter_EmptyBatch(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	a := &ThingsBoardMQTTAdapter{
+		cfg:    thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
+		client: fake,
+	}
+	if err := a.SendBatch(nil, nil); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(fake.publishes) != 0 {
+		t.Fatalf("expected 0 publishes for empty batch")
+	}
+}
+
+func TestThingsBoardMQTTAdapter_Close(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	a := &ThingsBoardMQTTAdapter{
+		cfg:    thingsboardMQTTConfig{},
+		client: fake,
+	}
+	if err := a.Close(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func floatPtr(v float64) *float64 { return &v }

@@ -1,6 +1,6 @@
-# Device Profiles (Phase 6 MVP)
+# Device Profiles
 
-Device profiles define which SNMP OIDs should be collected per vendor/model.
+Device profiles define which raw SNMP OIDs should be collected per vendor/model.
 They live in the `profiles/` directory and are loaded at runtime.
 
 ## Profile Selection
@@ -38,7 +38,7 @@ metrics:
 - `name` (string, required): profile name.
 - `match.vendor` (string): vendor match, empty means wildcard.
 - `match.model` (string): model match, empty means wildcard.
-- `metrics[]` (required): list of polled SNMP metrics.
+- `metrics[]` (required): list of polled raw SNMP metrics.
 
 Each metric:
 
@@ -46,10 +46,12 @@ Each metric:
 - `oid` (string, required): numeric OID string.
 - `type` (string, required): `get` or `walk`.
 - `unit` (string, optional): unit tag.
-- `index` (bool, optional): when `true`, adds `ifIndex` tag from walked OID suffix.
+- `index` (bool, optional): when `true`, adds `ifIndex` tag from walked OID suffix. This is used for interface tables and also hrStorage tables.
 
 ## Notes
 
 - Profiles are loaded from `profiles/*.yml` at runtime.
-- No cache is used in Phase 6; profiles are loaded on startup.
+- Device profiles only describe raw source OIDs. Derived metrics such as interface utilization, memory `used_pct`, or storage `used_pct`/`*_bytes` are created later by preprocessors and must not be added to profiles.
+- Vendor-specific OIDs are allowed when standard MIBs are missing or not useful on a platform.
+- No cache is used; profiles are loaded on startup.
 - SNMPv3 is not part of this MVP.

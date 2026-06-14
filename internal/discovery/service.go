@@ -12,6 +12,12 @@ import (
 	"nms-agent/internal/profiles"
 )
 
+const (
+	SkipReasonSNMPProbeFailed = "SNMP_PROBE_FAILED"
+	DefaultMaxNewDevices      = 50
+	UnlimitedMaxNewDevices    = -1
+)
+
 type Service struct {
 	Provider CandidateProvider
 	Prober   Prober
@@ -28,9 +34,6 @@ func (s Service) PreviewOnce(ctx context.Context, configPath string, loaded conf
 
 func (s Service) run(ctx context.Context, configPath string, loaded config.Loaded, apply bool) (Result, error) {
 	var res Result
-	if !loaded.Root.Discovery.Enabled {
-		return res, nil
-	}
 	if s.Provider == nil {
 		return res, fmt.Errorf("discovery provider is required")
 	}
@@ -67,8 +70,18 @@ func (s Service) run(ctx context.Context, configPath string, loaded config.Loade
 		filtered = append(filtered, c)
 	}
 
-	fingerprints := s.probeCandidates(ctx, filtered, loaded.Root.Discovery.SNMP)
-	for _, fp := range fingerprints {
+	probeResults := s.probeCandidates(ctx, filtered, loaded.Root.Discovery.SNMP)
+	maxNewDevices := NormalizeMaxNewDevicesLimit(loaded.Root.Discovery.AutoPromote.MaxNewDevicesPerCycle)
+	for _, probe := range probeResults {
+		if probe.err != nil {
+			addr := strings.TrimSpace(probe.candidate.Address)
+			if addr == "" {
+				addr = "unknown"
+			}
+			res.SkippedReasons = append(res.SkippedReasons, fmt.Sprintf("%s address=%s error=%v", SkipReasonSNMPProbeFailed, addr, probe.err))
+			continue
+		}
+		fp := probe.fp
 		if fp.SNMPOK {
 			res.SNMPOK++
 		} else if loaded.Root.Discovery.AutoPromote.RequireSNMPOK {
@@ -127,13 +140,20 @@ func (s Service) run(ctx context.Context, configPath string, loaded config.Loade
 			}
 		}
 		if !matched && loaded.Root.Discovery.AutoPromote.RequireProfileMatch {
-			res.SkippedReasons = append(res.SkippedReasons, fmt.Sprintf("no profile match: %s", fp.Address))
+			reason := fmt.Sprintf("no profile match: %s", fp.Address)
+			if strings.TrimSpace(fp.SysObjectID) != "" {
+				reason += " sysObjectID=" + fp.SysObjectID
+			}
+			if strings.TrimSpace(fp.SysDescr) != "" {
+				reason += " sysDescr=" + strings.TrimSpace(fp.SysDescr)
+			}
+			res.SkippedReasons = append(res.SkippedReasons, reason)
 			continue
 		}
 		if !loaded.Root.Discovery.AutoPromote.Enabled {
 			continue
 		}
-		if loaded.Root.Discovery.AutoPromote.MaxNewDevicesPerCycle > 0 && res.Promoted >= loaded.Root.Discovery.AutoPromote.MaxNewDevicesPerCycle {
+		if maxNewDevices > 0 && res.Promoted >= maxNewDevices {
 			res.SkippedReasons = append(res.SkippedReasons, fmt.Sprintf("promotion limit reached: %s", fp.Address))
 			continue
 		}
@@ -152,7 +172,24 @@ func (s Service) run(ctx context.Context, configPath string, loaded config.Loade
 	return res, nil
 }
 
-func (s Service) probeCandidates(ctx context.Context, candidates []Candidate, cfg config.DiscoverySNMP) []Fingerprint {
+func NormalizeMaxNewDevicesLimit(limit int) int {
+	if limit == UnlimitedMaxNewDevices {
+		return UnlimitedMaxNewDevices
+	}
+	if limit <= 0 {
+		return DefaultMaxNewDevices
+	}
+	return limit
+}
+
+type probeResult struct {
+	idx       int
+	candidate Candidate
+	fp        Fingerprint
+	err       error
+}
+
+func (s Service) probeCandidates(ctx context.Context, candidates []Candidate, cfg config.DiscoverySNMP) []probeResult {
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -160,20 +197,19 @@ func (s Service) probeCandidates(ctx context.Context, candidates []Candidate, cf
 	if workerCount <= 0 {
 		workerCount = 1
 	}
-	type item struct {
-		idx int
-		fp  Fingerprint
-	}
 	jobs := make(chan int)
-	results := make(chan item, len(candidates))
+	results := make(chan probeResult, len(candidates))
 	var wg sync.WaitGroup
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for idx := range jobs {
-				fp, _ := s.Prober.Probe(ctx, candidates[idx], cfg)
-				results <- item{idx: idx, fp: fp}
+				fp, err := s.Prober.Probe(ctx, candidates[idx], cfg)
+				if strings.TrimSpace(fp.Address) == "" {
+					fp.Candidate = candidates[idx]
+				}
+				results <- probeResult{idx: idx, candidate: candidates[idx], fp: fp, err: err}
 			}
 		}()
 	}
@@ -183,9 +219,9 @@ func (s Service) probeCandidates(ctx context.Context, candidates []Candidate, cf
 	close(jobs)
 	wg.Wait()
 	close(results)
-	out := make([]Fingerprint, len(candidates))
+	out := make([]probeResult, len(candidates))
 	for r := range results {
-		out[r.idx] = r.fp
+		out[r.idx] = r
 	}
 	return out
 }

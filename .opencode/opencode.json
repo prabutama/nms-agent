@@ -5,6 +5,7 @@
     "docs/AI_CONTEXT.md",
     "docs/PRD.md"
   ],
+  "formatter": true,
   "lsp": true,
   "watcher": {
     "ignore": [

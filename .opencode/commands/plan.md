@@ -2,16 +2,33 @@
 description: Plan a small implementation task without editing files
 ---
 
-Read AGENTS.md and docs/AI_CONTEXT.md.
+Read first:
+- AGENTS.md
+- docs/AI_CONTEXT.md
+- docs/ARCHITECTURE.md
+- docs/DEVELOPMENT_WORKFLOW.md
 
-Task:
+Task to plan:
 $ARGUMENTS
 
 Rules:
 - Do not edit files.
+- Do not create files.
+- Do not run destructive commands.
+- Use semantic search first.
 - Do not scan the whole repository.
 - Identify only relevant docs and files.
-- Propose a small implementation plan.
-- Mention expected files to edit.
-- Mention validation commands to run.
+- Keep the plan small and incremental.
+- Avoid large refactors unless the task explicitly requires them.
+- Mention whether contracts/docs likely need updates.
+- Mention validation commands to run after implementation.
 - Ask for confirmation before implementation.
+
+Return:
+- concise understanding of the task
+- relevant files/docs to inspect
+- proposed implementation steps
+- expected files to edit
+- expected tests
+- validation commands
+- risks/open questions
