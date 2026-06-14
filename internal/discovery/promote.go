@@ -73,6 +73,10 @@ func writePromotedDevice(baseDir string, loaded config.Loaded, fp Fingerprint, u
 	if err := os.WriteFile(tmpPath, b, 0o600); err != nil {
 		return "", err
 	}
+	if err := chownToServiceUser(tmpPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
 	if err := os.Rename(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath)
 		return "", err

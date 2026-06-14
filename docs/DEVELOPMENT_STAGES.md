@@ -2149,4 +2149,24 @@ Notes:
 - systemd sandbox now allows writes to `/etc/nms-agent/devices.d` and `/etc/nms-agent/profiles` for manual discovery artifacts.
 - install script now assigns `nms-agent:nms-agent` ownership to discovery-managed directories and existing YAML files inside them.
 - Documentation now instructs Linux/systemd users to run `nms-agentctl discovery ...` as user `nms-agent`.
+
+2026-06-15 04:00
+Task: Re-own discovery artifacts to nms-agent when CLI runs as root
+Changed files:
+- internal/discovery/promote.go
+- internal/discovery/ownership_unix.go
+- internal/discovery/ownership_nonunix.go
+- internal/discovery/explorer/explorer.go
+- docs/CONFIG_SCHEMA.md
+- docs/CLI_COMMANDS.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./...
+- make build
+Status update:
+- Root-run discovery ownership fix DONE
+Notes:
+- Manual discovery can continue running as `root`.
+- Promoted device files and generated profiles are now chowned to `nms-agent:nms-agent` on Unix before final rename.
+- Non-Unix builds keep ownership helper as no-op so cross-platform builds stay clean.
 ```

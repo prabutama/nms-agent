@@ -217,6 +217,10 @@ func writeGeneratedProfile(configPath string, loaded config.Loaded, prof profile
 	if err := os.WriteFile(tmpPath, b, 0o644); err != nil {
 		return "", err
 	}
+	if err := discovery.ChownGeneratedArtifact(tmpPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
 	if err := os.Rename(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath)
 		return "", err

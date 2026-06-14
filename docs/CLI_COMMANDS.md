@@ -51,8 +51,8 @@ nms-agentctl discovery preview --config configs/agent.yml --subnet 192.168.10.0/
 ### Run one discovery cycle immediately
 nms-agentctl discovery run --config configs/agent.yml --subnet 192.168.10.0/24 --max-new-devices 50
 
-### Run discovery as service user on Linux/systemd installs
-sudo -u nms-agent /opt/nms-agent/nms-agentctl discovery run --config /etc/nms-agent/agent.yml --subnet 192.168.10.0/24 --max-new-devices 50
+### Run discovery on Linux/systemd installs
+/opt/nms-agent/nms-agentctl discovery run --config /etc/nms-agent/agent.yml --subnet 192.168.10.0/24 --max-new-devices 50
 
 ### Override interface/provider/SNMP community during discovery
 nms-agentctl discovery run --config configs/agent.yml --subnet 192.168.10.0/24 --interface eth0 --provider active --snmp-community '${SNMP_COMMUNITY}'
@@ -63,7 +63,7 @@ nms-agentctl discovery run --config configs/agent.yml --subnet 192.168.10.0/24 -
 - Use `-1` for unlimited promotion.
 - Manual discovery always requires SNMP OK, `sysObjectID`, and known profile match before writing devices.
 - SNMP probe failures are shown as `SNMP_PROBE_FAILED` and skipped.
-- On Linux/systemd installs, run discovery as user `nms-agent` so promoted device/profile files stay readable by daemon.
+- On Linux/systemd installs, discovery may be run as `root`; promoted device/profile files are re-owned to service user `nms-agent` before becoming final files.
 
 ## Threshold Commands
 
