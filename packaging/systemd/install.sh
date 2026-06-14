@@ -66,7 +66,9 @@ if ! ls -1 "${ETC_DIR}/devices.d"/*.yml >/dev/null 2>&1; then
   install -m 0644 "${SCRIPT_DIR}/devices.d/example-linux-proxmox.yml" "${ETC_DIR}/devices.d/example-linux-proxmox.yml"
 fi
 
-chown -R nms-agent:nms-agent "${LIB_DIR}" "${LOG_DIR}"
+chown -R nms-agent:nms-agent "${LIB_DIR}" "${LOG_DIR}" "${ETC_DIR}/devices.d" "${PROFILES_DIR}"
+find "${ETC_DIR}/devices.d" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -exec chown nms-agent:nms-agent {} \;
+find "${PROFILES_DIR}" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -exec chown nms-agent:nms-agent {} \;
 
 systemctl daemon-reload
 systemctl enable --now nms-agent

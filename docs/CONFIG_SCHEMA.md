@@ -61,6 +61,7 @@ Notes:
 - If SNMP community is missing, CLI prints a warning and continues with the default public community.
 - Unknown profile matches are skipped with a warning and do not write `devices.d`.
 - Known profile matches are promoted to `devices.d` with `0600` file permission.
+- On Linux/systemd installs, run discovery CLI as user `nms-agent` so promoted files remain owned and readable by daemon.
 - Perubahan file `devices.d/*.yml` sekarang dipantau daemon; jika file device ditambah/diubah/dihapus dan config valid, runtime akan reload otomatis tanpa restart service.
 
 ## configs/devices.d/*.yml

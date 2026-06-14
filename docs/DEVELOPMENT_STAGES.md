@@ -2131,4 +2131,22 @@ Notes:
 - Promotion limit semantics: `0=default 50`, `>0=explicit limit`, `-1=unlimited`.
 - CLI expands environment variables in `--snmp-community`, exposes `--max-new-devices`, and keeps safe onboarding requirements forced on.
 - Added direct tests for CLI overrides, provider validation, interface auto-detect error paths, firstUsableHost /31 and /32, probe errors, empty fingerprint skip, and max-device limit normalization.
+
+2026-06-15 03:30
+Task: Align systemd discovery permissions with manual CLI-only flow
+Changed files:
+- packaging/systemd/nms-agent.service
+- packaging/systemd/install.sh
+- docs/CONFIG_SCHEMA.md
+- docs/CLI_COMMANDS.md
+- docs/DEVELOPMENT_STAGES.md
+Validation:
+- go test ./...
+- make build
+Status update:
+- Manual discovery permission model aligned DONE
+Notes:
+- systemd sandbox now allows writes to `/etc/nms-agent/devices.d` and `/etc/nms-agent/profiles` for manual discovery artifacts.
+- install script now assigns `nms-agent:nms-agent` ownership to discovery-managed directories and existing YAML files inside them.
+- Documentation now instructs Linux/systemd users to run `nms-agentctl discovery ...` as user `nms-agent`.
 ```
