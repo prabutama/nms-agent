@@ -3,6 +3,7 @@ package viewer
 import (
 	"context"
 	"sync"
+	"time"
 
 	"nms-agent/internal/models"
 )
@@ -12,15 +13,9 @@ type Hub struct {
 	mu          sync.RWMutex
 	adapter     string
 	snapshot    []models.Telemetry
-	subscribers map[chan []models.Telemetry]struct{}
-	statusCh    chan StatusUpdate
+	active      map[string]struct{}
+	subscribers map[chan Message]struct{}
 	provider    SnapshotProvider
-}
-
-// StatusUpdate carries adapter status and details for local viewing.
-type StatusUpdate struct {
-	Status  string
-	Details string
 }
 
 // SnapshotProvider can supply telemetry snapshot on demand.
@@ -31,8 +26,8 @@ type SnapshotProvider interface {
 func NewHub(adapter string) *Hub {
 	return &Hub{
 		adapter:     adapter,
-		subscribers: map[chan []models.Telemetry]struct{}{},
-		statusCh:    make(chan StatusUpdate, 16),
+		active:      map[string]struct{}{},
+		subscribers: map[chan Message]struct{}{},
 	}
 }
 
@@ -43,9 +38,29 @@ func (h *Hub) SetAdapter(name string) {
 }
 
 func (h *Hub) SetSnapshot(snap []models.Telemetry) {
+	filtered := h.filterActive(snap)
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.snapshot = append([]models.Telemetry(nil), snap...)
+	h.snapshot = append([]models.Telemetry(nil), filtered...)
+	adapter := h.adapter
+	h.mu.Unlock()
+	h.broadcast(Message{Type: "snapshot", Adapter: adapter, Telemetry: filtered, At: time.Now().UTC()})
+}
+
+func (h *Hub) SetActiveDevices(ids []string) {
+	active := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		active[id] = struct{}{}
+	}
+	h.mu.Lock()
+	h.active = active
+	h.snapshot = filterTelemetryByActive(h.snapshot, active)
+	adapter := h.adapter
+	snapshot := append([]models.Telemetry(nil), h.snapshot...)
+	h.mu.Unlock()
+	h.broadcast(Message{Type: "snapshot", Adapter: adapter, Telemetry: snapshot, At: time.Now().UTC()})
 }
 
 func (h *Hub) Adapter() string {
@@ -77,20 +92,16 @@ func (h *Hub) SnapshotFromProvider(ctx context.Context, limit int) []models.Tele
 	if err != nil {
 		return h.Snapshot()
 	}
-	return items
+	return h.filterActive(items)
 }
 
 func (h *Hub) Update(batch []models.Telemetry) {
+	batch = h.filterActive(batch)
 	if len(batch) == 0 {
 		return
 	}
 	h.mergeSnapshot(batch)
-	for ch := range h.subscribers {
-		select {
-		case ch <- batch:
-		default:
-		}
-	}
+	h.broadcast(Message{Type: "telemetry", Adapter: h.Adapter(), Telemetry: batch, At: time.Now().UTC()})
 }
 
 func (h *Hub) mergeSnapshot(batch []models.Telemetry) {
@@ -127,15 +138,15 @@ func telemetryKey(t models.Telemetry) string {
 	return t.DeviceID + "|" + t.Metric + "|" + t.Tags["ifIndex"]
 }
 
-func (h *Hub) Subscribe() chan []models.Telemetry {
-	ch := make(chan []models.Telemetry, 4)
+func (h *Hub) Subscribe() chan Message {
+	ch := make(chan Message, 8)
 	h.mu.Lock()
 	h.subscribers[ch] = struct{}{}
 	h.mu.Unlock()
 	return ch
 }
 
-func (h *Hub) Unsubscribe(ch chan []models.Telemetry) {
+func (h *Hub) Unsubscribe(ch chan Message) {
 	h.mu.Lock()
 	delete(h.subscribers, ch)
 	close(ch)
@@ -143,8 +154,42 @@ func (h *Hub) Unsubscribe(ch chan []models.Telemetry) {
 }
 
 func (h *Hub) UpdateStatus(status string, details string) {
-	select {
-	case h.statusCh <- StatusUpdate{Status: status, Details: details}:
-	default:
+	h.broadcast(Message{Type: "status", Adapter: h.Adapter(), Status: status, Details: details, At: time.Now().UTC()})
+}
+
+func (h *Hub) broadcast(msg Message) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for ch := range h.subscribers {
+		select {
+		case ch <- msg:
+		default:
+		}
 	}
+}
+
+func (h *Hub) filterActive(batch []models.Telemetry) []models.Telemetry {
+	h.mu.RLock()
+	active := make(map[string]struct{}, len(h.active))
+	for id := range h.active {
+		active[id] = struct{}{}
+	}
+	h.mu.RUnlock()
+	return filterTelemetryByActive(batch, active)
+}
+
+func filterTelemetryByActive(batch []models.Telemetry, active map[string]struct{}) []models.Telemetry {
+	if len(batch) == 0 {
+		return nil
+	}
+	if len(active) == 0 {
+		return append([]models.Telemetry(nil), batch...)
+	}
+	out := make([]models.Telemetry, 0, len(batch))
+	for _, t := range batch {
+		if _, ok := active[t.DeviceID]; ok {
+			out = append(out, t)
+		}
+	}
+	return out
 }

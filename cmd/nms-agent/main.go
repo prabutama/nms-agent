@@ -137,12 +137,16 @@ func run(args []string) int {
 		}
 		if hub != nil {
 			hub.SetAdapter(cfg.Adapters.Adapters.Active)
+			hub.SetActiveDevices(activeDeviceIDs(cfg.Devices))
 
 			// Wire queue snapshot provider
 			items, _ := q.(*queue.SQLiteQueue).Snapshot(context.Background(), 200)
 			var telemetry []models.Telemetry
+			activeIDs := activeDeviceIDSet(cfg.Devices)
 			for _, item := range items {
-				telemetry = append(telemetry, item.Telemetry)
+				if _, ok := activeIDs[item.Telemetry.DeviceID]; ok {
+					telemetry = append(telemetry, item.Telemetry)
+				}
 			}
 			hub.SetSnapshot(telemetry)
 
@@ -333,6 +337,28 @@ func buildTargets(loaded config.Loaded) (icmp []collectors.Target, snmp []collec
 		}
 	}
 	return icmp, snmp
+}
+
+func activeDeviceIDs(devices []config.Device) []string {
+	out := make([]string, 0, len(devices))
+	for _, d := range devices {
+		if d.ID == "" {
+			continue
+		}
+		out = append(out, d.ID)
+	}
+	return out
+}
+
+func activeDeviceIDSet(devices []config.Device) map[string]struct{} {
+	out := make(map[string]struct{}, len(devices))
+	for _, d := range devices {
+		if d.ID == "" {
+			continue
+		}
+		out[d.ID] = struct{}{}
+	}
+	return out
 }
 
 type combinedCollector struct {
