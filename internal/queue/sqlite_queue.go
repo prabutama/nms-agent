@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,8 @@ import (
 type SQLiteQueue struct {
 	db *sql.DB
 }
+
+const sqliteIDChunkSize = 900
 
 func OpenSQLite(path string) (*SQLiteQueue, error) {
 	db, err := sql.Open("sqlite", path)
@@ -139,13 +142,13 @@ func (q *SQLiteQueue) MarkDelivered(ctx context.Context, ids []string) error {
 		return nil
 	}
 	return execInTx(ctx, q.db, func(tx *sql.Tx) error {
-		stmt, err := tx.PrepareContext(ctx, "DELETE FROM queue_items WHERE id=?")
-		if err != nil {
-			return err
-		}
-		defer stmt.Close()
-		for _, id := range ids {
-			if _, err := stmt.ExecContext(ctx, id); err != nil {
+		for _, chunk := range chunkStrings(ids, sqliteIDChunkSize) {
+			args := make([]any, 0, len(chunk))
+			for _, id := range chunk {
+				args = append(args, id)
+			}
+			query := "DELETE FROM queue_items WHERE id IN (" + placeholders(len(chunk)) + ")"
+			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return err
 			}
 		}
@@ -159,13 +162,14 @@ func (q *SQLiteQueue) MarkFailed(ctx context.Context, ids []string, reason strin
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	return execInTx(ctx, q.db, func(tx *sql.Tx) error {
-		stmt, err := tx.PrepareContext(ctx, "UPDATE queue_items SET retry_count=retry_count+1, last_error=?, updated_at=? WHERE id=?")
-		if err != nil {
-			return err
-		}
-		defer stmt.Close()
-		for _, id := range ids {
-			if _, err := stmt.ExecContext(ctx, reason, now, id); err != nil {
+		for _, chunk := range chunkStrings(ids, sqliteIDChunkSize) {
+			args := make([]any, 0, len(chunk)+2)
+			args = append(args, reason, now)
+			for _, id := range chunk {
+				args = append(args, id)
+			}
+			query := "UPDATE queue_items SET retry_count=retry_count+1, last_error=?, updated_at=? WHERE id IN (" + placeholders(len(chunk)) + ")"
+			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return err
 			}
 		}
@@ -222,6 +226,28 @@ func execInTx(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.TrimRight(strings.Repeat("?,", n), ",")
+}
+
+func chunkStrings(values []string, size int) [][]string {
+	if size <= 0 || size >= len(values) {
+		return [][]string{values}
+	}
+	chunks := make([][]string, 0, (len(values)+size-1)/size)
+	for start := 0; start < len(values); start += size {
+		end := start + size
+		if end > len(values) {
+			end = len(values)
+		}
+		chunks = append(chunks, values[start:end])
+	}
+	return chunks
 }
 
 func newQueueID() string {

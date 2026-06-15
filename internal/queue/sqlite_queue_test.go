@@ -105,6 +105,83 @@ func TestSQLiteQueue_MarkFailedIncrementsRetry(t *testing.T) {
 	}
 }
 
+func TestSQLiteQueue_MarkDeliveredDeletesMultipleIDs(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "queue.db")
+
+	q, err := OpenSQLite(dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	defer q.Close()
+
+	ctx := context.Background()
+	if err := q.EnqueueBatch(ctx, telemetryBatch(3)); err != nil {
+		t.Fatalf("EnqueueBatch: %v", err)
+	}
+
+	items, err := q.PendingBatch(ctx, 10)
+	if err != nil {
+		t.Fatalf("PendingBatch: %v", err)
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+
+	if err := q.MarkDelivered(ctx, ids); err != nil {
+		t.Fatalf("MarkDelivered: %v", err)
+	}
+	items, err = q.PendingBatch(ctx, 10)
+	if err != nil {
+		t.Fatalf("PendingBatch after delivered: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestSQLiteQueue_MarkFailedIncrementsMultipleIDs(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "queue.db")
+
+	q, err := OpenSQLite(dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	defer q.Close()
+
+	ctx := context.Background()
+	if err := q.EnqueueBatch(ctx, telemetryBatch(3)); err != nil {
+		t.Fatalf("EnqueueBatch: %v", err)
+	}
+
+	items, err := q.PendingBatch(ctx, 10)
+	if err != nil {
+		t.Fatalf("PendingBatch: %v", err)
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+
+	if err := q.MarkFailed(ctx, ids, "boom"); err != nil {
+		t.Fatalf("MarkFailed: %v", err)
+	}
+	items, err = q.PendingBatch(ctx, 10)
+	if err != nil {
+		t.Fatalf("PendingBatch after failed: %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(items))
+	}
+	for _, item := range items {
+		if item.RetryCount != 1 {
+			t.Fatalf("expected retry 1, got %d", item.RetryCount)
+		}
+	}
+}
+
 func TestSQLiteQueue_EnqueueBatch_GeneratesUniqueIDs(t *testing.T) {
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "queue.db")
@@ -138,6 +215,14 @@ func TestSQLiteQueue_EnqueueBatch_GeneratesUniqueIDs(t *testing.T) {
 		}
 		seen[it.ID] = struct{}{}
 	}
+}
+
+func telemetryBatch(n int) []models.Telemetry {
+	batch := make([]models.Telemetry, 0, n)
+	for i := 0; i < n; i++ {
+		batch = append(batch, models.Telemetry{DeviceID: "d1", Metric: "m", TS: time.Now().UTC(), ValueType: "number", ValueNumber: floatPtr(float64(i))})
+	}
+	return batch
 }
 
 func floatPtr(v float64) *float64 {
