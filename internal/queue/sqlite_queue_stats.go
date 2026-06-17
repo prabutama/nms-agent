@@ -5,13 +5,14 @@ import (
 	"database/sql"
 )
 
-// Stats contains a minimal queue status snapshot.
+// Stats contains a queue status snapshot.
 type Stats struct {
-	PendingCount int
-	MaxRetry     int
+	PendingCount    int
+	DeadLetterCount int
+	MaxRetry        int
 }
 
-// Stats returns pending count and max retry_count for the SQLite-backed queue.
+// Stats returns pending/dead_letter count and max retry_count for the SQLite-backed queue.
 // It does not modify queue state.
 func (q *SQLiteQueue) Stats(ctx context.Context) (Stats, error) {
 	var s Stats
@@ -21,6 +22,9 @@ func (q *SQLiteQueue) Stats(ctx context.Context) (Stats, error) {
 	}
 
 	if err := q.db.QueryRowContext(ctx, "SELECT COUNT(1) FROM queue_items WHERE status='pending'").Scan(&s.PendingCount); err != nil {
+		return Stats{}, err
+	}
+	if err := q.db.QueryRowContext(ctx, "SELECT COUNT(1) FROM queue_items WHERE status='dead_letter'").Scan(&s.DeadLetterCount); err != nil {
 		return Stats{}, err
 	}
 	// MAX() returns NULL on empty tables.

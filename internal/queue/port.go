@@ -10,10 +10,11 @@ import (
 // QueueItem is a persisted telemetry record with queue metadata.
 // IDs are required so deliveries can be acknowledged precisely.
 type QueueItem struct {
-	ID         string
-	Telemetry  models.Telemetry
-	RetryCount int
-	CreatedAt  time.Time
+	ID            string
+	Telemetry     models.Telemetry
+	RetryCount    int
+	CreatedAt     time.Time
+	NextAttemptAt time.Time
 }
 
 // Queue persists telemetry for store-and-forward delivery.

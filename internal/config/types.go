@@ -20,6 +20,7 @@ type Agent struct {
 	PollInterval time.Duration `yaml:"poll_interval"`
 	Delivery     Delivery      `yaml:"delivery"`
 	Output       Output        `yaml:"output"`
+	Logging      Logging       `yaml:"logging"`
 }
 
 // Output configures presentation-only output settings.
@@ -28,12 +29,55 @@ type Output struct {
 	Timezone string `yaml:"timezone"`
 }
 
+// Logging configures structured logging for the agent.
+type Logging struct {
+	Level  string `yaml:"level"`
+	Format string `yaml:"format"`
+}
+
+func (l Logging) WithDefaults() Logging {
+	out := l
+	if out.Level == "" {
+		out.Level = "info"
+	}
+	if out.Format == "" {
+		out.Format = "text"
+	}
+	return out
+}
+
 // Delivery configures the queue delivery drain loop (Phase 8).
 type Delivery struct {
-	MaxBatch           int  `yaml:"max_batch"`
-	DrainEnabled       bool `yaml:"drain_enabled"`
-	MaxBatchesPerCycle int  `yaml:"max_batches_per_cycle"`
-	StopOnError        bool `yaml:"stop_on_error"`
+	MaxBatch           int           `yaml:"max_batch"`
+	DrainEnabled       bool          `yaml:"drain_enabled"`
+	MaxBatchesPerCycle int           `yaml:"max_batches_per_cycle"`
+	StopOnError        bool          `yaml:"stop_on_error"`
+	Retry              DeliveryRetry `yaml:"retry"`
+}
+
+type DeliveryRetry struct {
+	Enabled       bool          `yaml:"enabled"`
+	BaseBackoff   time.Duration `yaml:"base_backoff"`
+	MaxBackoff    time.Duration `yaml:"max_backoff"`
+	MaxRetries    int           `yaml:"max_retries"`
+	RetentionDays int           `yaml:"retention_days"`
+}
+
+func (r DeliveryRetry) WithDefaults() DeliveryRetry {
+	out := r
+	if out.BaseBackoff <= 0 {
+		out.BaseBackoff = 10 * time.Second
+	}
+	if out.MaxBackoff <= 0 {
+		out.MaxBackoff = 300 * time.Second
+	}
+	if out.MaxRetries <= 0 {
+		out.MaxRetries = 10
+	}
+	if out.RetentionDays <= 0 {
+		out.RetentionDays = 30
+	}
+	return out
 }
 
 // ResolvePath resolves a config path relative to baseDir and expands env vars.

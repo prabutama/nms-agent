@@ -19,6 +19,22 @@ func Validate(cfg Loaded) error {
 	if cfg.Root.Agent.PollInterval <= 0 {
 		errs = append(errs, "agent.poll_interval must be > 0")
 	}
+	// Logging config is optional; validate if provided.
+	if lvl := strings.TrimSpace(cfg.Root.Agent.Logging.Level); lvl != "" {
+		switch lvl {
+		case "debug", "info", "warn", "warning", "error":
+		default:
+			errs = append(errs, "agent.logging.level must be one of: debug, info, warn, error")
+		}
+	}
+	if fmt := strings.TrimSpace(cfg.Root.Agent.Logging.Format); fmt != "" {
+		switch fmt {
+		case "text", "json":
+		default:
+			errs = append(errs, "agent.logging.format must be one of: text, json")
+		}
+	}
+
 	// Output timezone is presentation-only; validate if provided.
 	if tz := strings.TrimSpace(cfg.Root.Agent.Output.Timezone); tz != "" {
 		if _, err := LoadLocation(tz); err != nil {
@@ -178,7 +194,32 @@ func ValidateFiles(agentConfigPath string) error {
 		return err
 	}
 
+	// Security warnings.
+	w := warnings(cfg)
+	for _, msg := range w {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", msg)
+	}
+
 	return nil
+}
+
+func warnings(cfg Loaded) []string {
+	var out []string
+
+	// Check adapter configs for known insecure patterns.
+	adapterName := cfg.Adapters.Adapters.Active
+	adapterCfg := cfg.Adapters.Adapters.Configs
+
+	// MQTT over plain TCP without TLS.
+	if adapterName == "generic_mqtt" || adapterName == "thingsboard_mqtt" {
+		if broker, ok := adapterCfg["broker"].(string); ok {
+			if strings.HasPrefix(broker, "tcp://") {
+				out = append(out, fmt.Sprintf("adapter %q uses plain TCP broker %q (consider mqtts:// or wss:// in production)", adapterName, broker))
+			}
+		}
+	}
+
+	return out
 }
 
 func ensureYAMLKeyExists(agentConfigAbsPath, relativeOrAbsPath, topKey string) error {

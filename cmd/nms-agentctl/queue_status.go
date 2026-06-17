@@ -42,6 +42,6 @@ func runQueueStatus(args []string) int {
 	}
 
 	// Stable, short output.
-	fmt.Fprintf(os.Stdout, "queue_db=%s pending=%d max_retry=%d\n", cfg.Root.Paths.QueueDB, st.PendingCount, st.MaxRetry)
+	fmt.Fprintf(os.Stdout, "queue_db=%s pending=%d dead_letter=%d max_retry=%d\n", cfg.Root.Paths.QueueDB, st.PendingCount, st.DeadLetterCount, st.MaxRetry)
 	return 0
 }

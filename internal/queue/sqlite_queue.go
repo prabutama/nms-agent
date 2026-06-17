@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -14,10 +16,20 @@ import (
 	"nms-agent/internal/models"
 )
 
+// RetryConfig controls exponential backoff and dead-letter behavior for failed queue items.
+// When Enabled is false, all pending items are retried immediately (legacy behavior).
+type RetryConfig struct {
+	Enabled     bool
+	BaseBackoff time.Duration
+	MaxBackoff  time.Duration
+	MaxRetries  int
+}
+
 // SQLiteQueue is the durable queue implementation (Phase 4A).
 // It persists canonical telemetry as JSON for store-and-forward delivery.
 type SQLiteQueue struct {
-	db *sql.DB
+	db       *sql.DB
+	retryCfg RetryConfig
 }
 
 const sqliteIDChunkSize = 900
@@ -38,6 +50,12 @@ func OpenSQLite(path string) (*SQLiteQueue, error) {
 	return q, nil
 }
 
+// SetRetryConfig configures exponential backoff for the queue.
+// Call before the first cycle; safe to call at any time.
+func (q *SQLiteQueue) SetRetryConfig(cfg RetryConfig) {
+	q.retryCfg = cfg
+}
+
 func (q *SQLiteQueue) Close() error {
 	if q == nil || q.db == nil {
 		return nil
@@ -56,9 +74,20 @@ func (q *SQLiteQueue) init(ctx context.Context) error {
 			"retry_count INTEGER NOT NULL DEFAULT 0,\n" +
 			"last_error TEXT,\n" +
 			"created_at TEXT NOT NULL,\n" +
-			"updated_at TEXT NOT NULL\n" +
+			"updated_at TEXT NOT NULL,\n" +
+			"next_attempt_at TEXT,\n" +
+			"last_attempt_at TEXT\n" +
 			");",
 		"CREATE INDEX IF NOT EXISTS idx_queue_items_status_created ON queue_items(status, created_at);",
+	}
+	// Phase 4 migration: add retry columns if missing.
+	for _, alter := range []string{
+		"ALTER TABLE queue_items ADD COLUMN next_attempt_at TEXT;",
+		"ALTER TABLE queue_items ADD COLUMN last_attempt_at TEXT;",
+	} {
+		if _, err := q.db.ExecContext(ctx, alter); err != nil {
+			// Column already exists — ignore error.
+		}
 	}
 	for _, s := range stmts {
 		if _, err := q.db.ExecContext(ctx, s); err != nil {
@@ -104,10 +133,17 @@ func (q *SQLiteQueue) PendingBatch(ctx context.Context, limit int) ([]QueueItem,
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := q.db.QueryContext(ctx,
-		"SELECT id, payload_json, retry_count, created_at FROM queue_items WHERE status='pending' ORDER BY created_at ASC LIMIT ?",
-		limit,
-	)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	var query string
+	var args []any
+	if q.retryCfg.Enabled {
+		query = "SELECT id, payload_json, retry_count, created_at, next_attempt_at FROM queue_items WHERE status='pending' AND (next_attempt_at IS NULL OR next_attempt_at <= ?) ORDER BY created_at ASC LIMIT ?"
+		args = []any{now, limit}
+	} else {
+		query = "SELECT id, payload_json, retry_count, created_at, next_attempt_at FROM queue_items WHERE status='pending' ORDER BY created_at ASC LIMIT ?"
+		args = []any{limit}
+	}
+	rows, err := q.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -116,12 +152,13 @@ func (q *SQLiteQueue) PendingBatch(ctx context.Context, limit int) ([]QueueItem,
 	var out []QueueItem
 	for rows.Next() {
 		var (
-			id         string
-			payload    string
-			retryCount int
-			createdAt  string
+			id          string
+			payload     string
+			retryCount  int
+			createdAt   string
+			nextAttempt sql.NullString
 		)
-		if err := rows.Scan(&id, &payload, &retryCount, &createdAt); err != nil {
+		if err := rows.Scan(&id, &payload, &retryCount, &createdAt, &nextAttempt); err != nil {
 			return nil, err
 		}
 		var t models.Telemetry
@@ -129,7 +166,13 @@ func (q *SQLiteQueue) PendingBatch(ctx context.Context, limit int) ([]QueueItem,
 			return nil, err
 		}
 		ct, _ := time.Parse(time.RFC3339Nano, createdAt)
-		out = append(out, QueueItem{ID: id, Telemetry: t, RetryCount: retryCount, CreatedAt: ct})
+		item := QueueItem{ID: id, Telemetry: t, RetryCount: retryCount, CreatedAt: ct}
+		if nextAttempt.Valid {
+			if t, err := time.Parse(time.RFC3339Nano, nextAttempt.String); err == nil {
+				item.NextAttemptAt = t
+			}
+		}
+		out = append(out, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -160,21 +203,87 @@ func (q *SQLiteQueue) MarkFailed(ctx context.Context, ids []string, reason strin
 	if len(ids) == 0 {
 		return nil
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339Nano)
 	return execInTx(ctx, q.db, func(tx *sql.Tx) error {
 		for _, chunk := range chunkStrings(ids, sqliteIDChunkSize) {
-			args := make([]any, 0, len(chunk)+2)
-			args = append(args, reason, now)
-			for _, id := range chunk {
-				args = append(args, id)
-			}
-			query := "UPDATE queue_items SET retry_count=retry_count+1, last_error=?, updated_at=? WHERE id IN (" + placeholders(len(chunk)) + ")"
-			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-				return err
+			if q.retryCfg.Enabled {
+				base := q.retryCfg.BaseBackoff
+				if base <= 0 {
+					base = 10 * time.Second
+				}
+				maxBackoff := q.retryCfg.MaxBackoff
+				if maxBackoff <= 0 {
+					maxBackoff = 300 * time.Second
+				}
+				maxRetries := q.retryCfg.MaxRetries
+				if maxRetries <= 0 {
+					maxRetries = 10
+				}
+				// Read current retry_count for each id
+				ph := placeholders(len(chunk))
+				rows, err := tx.QueryContext(ctx, "SELECT id, retry_count FROM queue_items WHERE id IN ("+ph+")", strToAny(chunk)...)
+				if err != nil {
+					return fmt.Errorf("read retry_count: %w", err)
+				}
+				counts := make(map[string]int, len(chunk))
+				for rows.Next() {
+					var id string
+					var c int
+					if err := rows.Scan(&id, &c); err != nil {
+						rows.Close()
+						return fmt.Errorf("scan retry_count: %w", err)
+					}
+					counts[id] = c
+				}
+				rows.Close()
+
+				for _, id := range chunk {
+					c := counts[id]
+					newCount := c + 1
+
+					if maxRetries > 0 && newCount >= maxRetries {
+						// Move to dead_letter — stop retrying.
+						if _, err := tx.ExecContext(ctx,
+							"UPDATE queue_items SET retry_count=retry_count+1, status='dead_letter', last_error=?, updated_at=?, last_attempt_at=? WHERE id=?",
+							reason, nowStr, nowStr, id,
+						); err != nil {
+							return fmt.Errorf("mark dead_letter: %w", err)
+						}
+					} else {
+						// Exponential backoff.
+						backoff := time.Duration(math.Min(float64(base)*math.Pow(2, float64(newCount)), float64(maxBackoff)))
+						nextAttempt := now.Add(backoff).Format(time.RFC3339Nano)
+						if _, err := tx.ExecContext(ctx,
+							"UPDATE queue_items SET retry_count=retry_count+1, last_error=?, updated_at=?, last_attempt_at=?, next_attempt_at=? WHERE id=?",
+							reason, nowStr, nowStr, nextAttempt, id,
+						); err != nil {
+							return fmt.Errorf("mark failed with backoff: %w", err)
+						}
+					}
+				}
+			} else {
+				args := make([]any, 0, len(chunk)+3)
+				args = append(args, reason, nowStr, nowStr)
+				for _, id := range chunk {
+					args = append(args, id)
+				}
+				query := "UPDATE queue_items SET retry_count=retry_count+1, last_error=?, updated_at=?, last_attempt_at=? WHERE id IN (" + placeholders(len(chunk)) + ")"
+				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+					return fmt.Errorf("mark failed: %w", err)
+				}
 			}
 		}
 		return nil
 	})
+}
+
+func strToAny(s []string) []any {
+	out := make([]any, len(s))
+	for i, v := range s {
+		out[i] = v
+	}
+	return out
 }
 
 // Snapshot returns the latest queue items for local viewing.
@@ -184,7 +293,7 @@ func (q *SQLiteQueue) Snapshot(ctx context.Context, limit int) ([]QueueItem, err
 		limit = 200
 	}
 	rows, err := q.db.QueryContext(ctx,
-		"SELECT id, payload_json, retry_count, created_at FROM queue_items ORDER BY created_at DESC LIMIT ?",
+		"SELECT id, payload_json, retry_count, created_at, next_attempt_at FROM queue_items ORDER BY created_at DESC LIMIT ?",
 		limit,
 	)
 	if err != nil {
@@ -195,12 +304,13 @@ func (q *SQLiteQueue) Snapshot(ctx context.Context, limit int) ([]QueueItem, err
 	var out []QueueItem
 	for rows.Next() {
 		var (
-			id         string
-			payload    string
-			retryCount int
-			createdAt  string
+			id          string
+			payload     string
+			retryCount  int
+			createdAt   string
+			nextAttempt sql.NullString
 		)
-		if err := rows.Scan(&id, &payload, &retryCount, &createdAt); err != nil {
+		if err := rows.Scan(&id, &payload, &retryCount, &createdAt, &nextAttempt); err != nil {
 			return nil, err
 		}
 		var t models.Telemetry
@@ -208,7 +318,13 @@ func (q *SQLiteQueue) Snapshot(ctx context.Context, limit int) ([]QueueItem, err
 			return nil, err
 		}
 		ct, _ := time.Parse(time.RFC3339Nano, createdAt)
-		out = append(out, QueueItem{ID: id, Telemetry: t, RetryCount: retryCount, CreatedAt: ct})
+		item := QueueItem{ID: id, Telemetry: t, RetryCount: retryCount, CreatedAt: ct}
+		if nextAttempt.Valid {
+			if t, err := time.Parse(time.RFC3339Nano, nextAttempt.String); err == nil {
+				item.NextAttemptAt = t
+			}
+		}
+		out = append(out, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -248,6 +364,20 @@ func chunkStrings(values []string, size int) [][]string {
 		chunks = append(chunks, values[start:end])
 	}
 	return chunks
+}
+
+// CleanupDeleted removes items that are dead_letter or delivered (status not 'pending')
+// and older than the given age. Returns number of rows deleted.
+func (q *SQLiteQueue) CleanupDeleted(ctx context.Context, olderThan time.Duration) (int64, error) {
+	if q == nil || q.db == nil {
+		return 0, sql.ErrConnDone
+	}
+	cutoff := time.Now().UTC().Add(-olderThan).Format(time.RFC3339Nano)
+	res, err := q.db.ExecContext(ctx, "DELETE FROM queue_items WHERE status != 'pending' AND updated_at < ?", cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func newQueueID() string {

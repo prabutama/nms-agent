@@ -76,6 +76,7 @@ The agent does not listen for inbound connections. No additional firewall rules 
 - Queue data may contain network topology information
 - Ensure queue storage volume is encrypted at rest where required
 - Implement queue data retention policies if needed
+- The agent writes a runtime status file (`status.json`) alongside the queue DB — it contains cycle state and queue metrics; protect it with the same permissions as `queue.db`
 
 ## Binary Distribution
 
@@ -89,6 +90,19 @@ The agent does not listen for inbound connections. No additional firewall rules 
 - Alert on adapter connection failures
 - Track queue depth for delivery health
 - Review device config changes regularly
+
+## Structured Logging
+
+- Logs may contain device IDs, metric names, and error details — treat as internal data
+- Set `agent.logging.level` to `info` in production; use `debug` only for targeted troubleshooting
+- Use `agent.logging.format: json` for machine-parsable logs in centralized logging systems
+- Log output goes to stderr (captured by journald/systemd on Linux)
+
+## Retry Queue Security
+
+- The retry backoff feature (`agent.delivery.retry.enabled`) stores `next_attempt_at` and `last_attempt_at` in the queue database
+- Dead-letter items (`status='dead_letter'`) persist until cleaned up by retention policy (`retention_days`)
+- Items that exceed `max_retries` move to `dead_letter` and are never retried — monitor dead-letter count for systemic failures
 
 ## Known Security Considerations
 

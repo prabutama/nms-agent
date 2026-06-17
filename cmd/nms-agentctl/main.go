@@ -24,6 +24,8 @@ func main() {
 		os.Exit(runReload(os.Args[2:]))
 	case "queue":
 		os.Exit(runQueue(os.Args[2:]))
+	case "status":
+		os.Exit(runStatus(os.Args[2:]))
 	case "device":
 		os.Exit(runDevice(os.Args[2:]))
 	case "threshold":
@@ -78,6 +80,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  nms-agentctl --help")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl help")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl validate")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl status [--watch]")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl reload --pid <pid>")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl device list")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl device add --id <id> --address <host> --vendor <v> --model <m> [--snmp=true] [--icmp=true]")
@@ -93,6 +96,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery preview")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl discovery run")
 	fmt.Fprintln(os.Stderr, "  nms-agentctl view")
+	fmt.Fprintln(os.Stderr, "  nms-agentctl status")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Config default: /etc/nms-agent/agent.yml")
 	fmt.Fprintln(os.Stderr, "Override with: --config <path>")

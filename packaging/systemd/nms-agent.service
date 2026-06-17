@@ -10,6 +10,8 @@ Group=nms-agent
 
 RuntimeDirectory=nms-agent
 RuntimeDirectoryMode=0755
+StateDirectory=nms-agent
+LogsDirectory=nms-agent
 
 WorkingDirectory=/etc/nms-agent
 EnvironmentFile=-/etc/nms-agent/nms-agent.env
@@ -18,7 +20,13 @@ ExecStart=/opt/nms-agent/nms-agent run --config /etc/nms-agent/agent.yml --colle
 ExecReload=/bin/kill -HUP $MAINPID
 
 Restart=always
-RestartSec=3
+RestartSec=5
+TimeoutStopSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+MemoryMax=256M
+LimitNOFILE=65536
 
 NoNewPrivileges=true
 PrivateTmp=true

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,11 +16,13 @@ import (
 	"nms-agent/internal/config"
 	"nms-agent/internal/configwatch"
 	"nms-agent/internal/core"
+	"nms-agent/internal/logger"
 	"nms-agent/internal/models"
 	"nms-agent/internal/processors"
 	"nms-agent/internal/profiles"
 	"nms-agent/internal/queue"
 	"nms-agent/internal/routes"
+	"nms-agent/internal/status"
 	"nms-agent/internal/viewer"
 )
 
@@ -74,15 +77,22 @@ func run(args []string) int {
 	}
 	adapters.SetOutputLocation(loc)
 
-	fmt.Fprintf(os.Stdout, "nms-agent starting\n")
-	fmt.Fprintf(os.Stdout, "config: %s\n", configAbs)
-	fmt.Fprintf(os.Stdout, "poll_interval: %s\n", loaded.Root.Agent.PollInterval)
-	fmt.Fprintf(os.Stdout, "devices: %d\n", len(loaded.Devices))
-	fmt.Fprintf(os.Stdout, "adapter.active: %s\n", loaded.Adapters.Adapters.Active)
-	fmt.Fprintf(os.Stdout, "output.timezone: %s\n", loc.String())
-	fmt.Fprintf(os.Stdout, "queue.db: %s\n", loaded.Root.Paths.QueueDB)
-	fmt.Fprintf(os.Stdout, "collector.mode: %s\n", *collectorMode)
-	fmt.Fprintln(os.Stdout)
+	logCfg := loaded.Root.Agent.Logging.WithDefaults()
+	log, err := logger.New(logger.Config{Level: logCfg.Level, Format: logCfg.Format})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+
+	log.Info("starting",
+		"config", configAbs,
+		"poll_interval", loaded.Root.Agent.PollInterval.String(),
+		"devices", len(loaded.Devices),
+		"adapter.active", loaded.Adapters.Adapters.Active,
+		"output.timezone", loc.String(),
+		"queue.db", loaded.Root.Paths.QueueDB,
+		"collector.mode", *collectorMode,
+	)
 
 	queuePath := loaded.Root.Paths.QueueDB
 	queueDir := filepath.Dir(queuePath)
@@ -99,7 +109,24 @@ func run(args []string) int {
 	}
 	defer q.Close()
 
-	buildPipeline := func(cfg config.Loaded, queuePath string, q queue.Queue, hub *viewer.Hub) (*core.Pipeline, adapters.Adapter, error) {
+	// Wire retry backoff config if queue supports it.
+	retryCfg := loaded.Root.Agent.Delivery.Retry.WithDefaults()
+	if retryCfg.Enabled {
+		q.SetRetryConfig(queue.RetryConfig{
+			Enabled:     true,
+			BaseBackoff: retryCfg.BaseBackoff,
+			MaxBackoff:  retryCfg.MaxBackoff,
+			MaxRetries:  retryCfg.MaxRetries,
+		})
+		log.Info("queue_retry_enabled", "base_backoff", retryCfg.BaseBackoff.String(), "max_backoff", retryCfg.MaxBackoff.String())
+	}
+
+	runtimeStatus := status.NewRuntime()
+	statusFilePath := filepath.Join(filepath.Dir(queuePath), "status.json")
+	cleanupInterval := loaded.Root.Agent.Delivery.Retry.RetentionDays
+	cleanupCounter := 0
+
+	buildPipeline := func(cfg config.Loaded, queuePath string, q queue.Queue, hub *viewer.Hub, log *logger.Logger) (*core.Pipeline, adapters.Adapter, error) {
 		coll, err := buildCollector(*collectorMode, cfg)
 		if err != nil {
 			return nil, nil, err
@@ -164,6 +191,7 @@ func run(args []string) int {
 			ad,
 			dc,
 		)
+		p.SetLogger(log)
 		if hub != nil {
 			p.SetObserver(hub)
 		}
@@ -180,11 +208,14 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "viewer server error: %v\n", err)
 	}
 
-	p, adapter, err := buildPipeline(loaded, queuePath, q, viewHub)
+	p, adapter, err := buildPipeline(loaded, queuePath, q, viewHub, log)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
 	}
+
+	runtimeStatus.Update(loaded.Adapters.Adapters.Active, loaded.Root.Agent.PollInterval.String(), len(loaded.Devices), true, "", time.Now(), 0, 0, 0)
+	_ = runtimeStatus.WriteFile(statusFilePath)
 
 	reloadCh := make(chan os.Signal, 1)
 	if sigs := reloadSignals(); len(sigs) > 0 {
@@ -215,13 +246,13 @@ func run(args []string) int {
 	reloadPipeline := func(newLoaded config.Loaded) bool {
 		loc, err := config.LoadLocation(newLoaded.Root.Agent.Output.Timezone)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+			log.Warn("reload_failed", "step", "timezone", "error", err.Error())
 			return false
 		}
 		adapters.SetOutputLocation(loc)
-		newP, newAdapter, err := buildPipeline(newLoaded, queuePath, q, viewHub)
+		newP, newAdapter, err := buildPipeline(newLoaded, queuePath, q, viewHub, log)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+			log.Warn("reload_failed", "step", "build_pipeline", "error", err.Error())
 			return false
 		}
 		if c, ok := adapter.(adapters.Closable); ok {
@@ -245,7 +276,7 @@ func run(args []string) int {
 			if watcherPath != "" {
 				devicesWatcher = configwatch.NewDevicesWatcher(watcherPath, 500*time.Millisecond)
 				if err := devicesWatcher.Start(); err != nil {
-					fmt.Fprintf(os.Stderr, "warning: could not restart devices watcher: %v\n", err)
+					log.Warn("devices_watcher_restart_failed", "error", err.Error())
 				} else {
 					devicesChangedCh = devicesWatcher.Changes()
 				}
@@ -256,39 +287,75 @@ func run(args []string) int {
 	}
 
 	for {
-		if err := p.RunOnce(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
+		cycleStart := time.Now()
+		cycleErr := p.RunOnce(ctx)
+		if cycleErr != nil {
+			log.Error("cycle_error", "error", cycleErr.Error())
 		}
+		st, _ := q.Stats(ctx)
+		runtimeStatus.Update(
+			loaded.Adapters.Adapters.Active,
+			loaded.Root.Agent.PollInterval.String(),
+			len(loaded.Devices),
+			cycleErr == nil,
+			func() string {
+				if cycleErr != nil {
+					return cycleErr.Error()
+				}
+				return ""
+			}(),
+			cycleStart,
+			st.PendingCount,
+			st.DeadLetterCount,
+			st.MaxRetry,
+		)
+		_ = runtimeStatus.WriteFile(statusFilePath)
+
+		cleanupCounter++
+		if cleanupInterval > 0 && cleanupCounter >= 100 {
+			cleanupCounter = 0
+			if deleted, err := q.CleanupDeleted(ctx, time.Duration(cleanupInterval)*24*time.Hour); err != nil {
+				log.Warn("queue_cleanup_error", "error", err.Error())
+			} else if deleted > 0 {
+				log.Info("queue_cleanup_done", "deleted", deleted, "retention_days", cleanupInterval)
+			}
+		}
+
 		select {
 		case <-ctx.Done():
+			log.Info("shutting_down")
 			return 0
 		case <-reloadCh:
 			newLoaded, err := config.LoadFromFile(configAbs)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+				log.Warn("reload_failed", "step", "load", "error", err.Error())
 				continue
 			}
 			if err := config.Validate(newLoaded); err != nil {
-				fmt.Fprintf(os.Stderr, "reload failed: %v\n", err)
+				log.Warn("reload_failed", "step", "validate", "error", err.Error())
 				continue
 			}
 			if !reloadPipeline(newLoaded) {
 				continue
 			}
-			fmt.Fprintf(os.Stdout, "reloaded config: devices=%d adapter.active=%s\n", len(loaded.Devices), loaded.Adapters.Adapters.Active)
+			log.Info("reload_completed", "devices", len(loaded.Devices), "adapter.active", loaded.Adapters.Adapters.Active)
+			runtimeStatus.Update(loaded.Adapters.Adapters.Active, loaded.Root.Agent.PollInterval.String(), len(loaded.Devices), true, "", time.Now(), 0, 0, 0)
+			_ = runtimeStatus.WriteFile(statusFilePath)
 			continue
 		case <-devicesChangedCh:
 			newLoaded, err := config.LoadFromFile(configAbs)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "devices watcher reload failed: %v\n", err)
+				log.Warn("devices_watcher_reload_failed", "step", "load", "error", err.Error())
 				continue
 			}
 			if err := config.Validate(newLoaded); err != nil {
-				fmt.Fprintf(os.Stderr, "devices watcher reload failed: %v\n", err)
+				log.Warn("devices_watcher_reload_failed", "step", "validate", "error", err.Error())
 				continue
 			}
 			if reloadPipeline(newLoaded) {
-				fmt.Fprintf(os.Stdout, "devices watcher reloaded config: devices=%d adapter.active=%s\n", len(loaded.Devices), loaded.Adapters.Adapters.Active)
+				log.Info("devices_watcher_reload_completed", "devices", len(loaded.Devices), "adapter.active", loaded.Adapters.Adapters.Active)
+				runtimeStatus.Update(loaded.Adapters.Adapters.Active, loaded.Root.Agent.PollInterval.String(), len(loaded.Devices), true, "", time.Now(), 0, 0, 0)
+				_ = runtimeStatus.WriteFile(statusFilePath)
 			}
 			continue
 		case <-ticker.C:
@@ -367,12 +434,17 @@ type combinedCollector struct {
 
 func (c combinedCollector) Collect(ctx context.Context) ([]models.RawSample, error) {
 	var out []models.RawSample
+	var errs []string
 	for _, col := range c.collectors {
 		batch, err := col.Collect(ctx)
 		if err != nil {
-			return nil, err
+			errs = append(errs, err.Error())
+			continue
 		}
 		out = append(out, batch...)
+	}
+	if len(errs) > 0 {
+		return out, fmt.Errorf("collector errors: %s", strings.Join(errs, "; "))
 	}
 	return out, nil
 }

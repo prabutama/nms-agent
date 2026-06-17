@@ -17,6 +17,18 @@ Failed deliveries stay pending for retry.
 
 Windows: use `make.bat` instead. No CGO (uses `modernc.org/sqlite`).
 
+## Production Features (added in production readiness phase)
+
+| Feature | Package / File | Config |
+|---------|---------------|--------|
+| Structured logging | `internal/logger/` | `agent.logging.level` / `agent.logging.format` |
+| Runtime status | `internal/status/` | `nms-agentctl status [--watch]` |
+| Retry backoff | `internal/queue/sqlite_queue.go` | `agent.delivery.retry.*` |
+| Dead-letter | `internal/queue/sqlite_queue.go` | `max_retries` / `retention_days` |
+| systemd hardening | `packaging/systemd/nms-agent.service` | `MemoryMax`, `LimitNOFILE`, `StartLimitBurst` |
+| Failure isolation | `cmd/nms-agent/main.go` (`combinedCollector`) | Best-effort per-collector |
+| CI quality gate | `Makefile` / `make.bat` | `make check-all` (race, lint, vuln) |
+
 ## Deeper Docs
 
 | File | Covers |
@@ -30,3 +42,7 @@ Windows: use `make.bat` instead. No CGO (uses `modernc.org/sqlite`).
 | `docs/DEVICE_PROFILE.md` | SNMP profile YAML schema |
 | `docs/CLI_COMMANDS.md` | All nms-agentctl commands |
 | `docs/DEVELOPMENT_WORKFLOW.md` | Dev flow and conventions |
+| `docs/PRODUCTION_ROADMAP.md` | Full phased production plan |
+| `docs/BASELINE_0.md` | Test/behavior baseline |
+| `docs/SOAK_TEST_PLAN.md` | Load & soak test procedures |
+| `docs/SECURITY.md` | Security hardening guide |
