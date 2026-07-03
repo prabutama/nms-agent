@@ -12,6 +12,7 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 
+	"nms-agent/internal/adapters/base"
 	tbintegration "nms-agent/internal/integrations/thingsboard"
 	"nms-agent/internal/models"
 	"nms-agent/internal/routes"
@@ -32,6 +33,19 @@ type thingsboardMQTTConfig struct {
 	ConnectTimeout time.Duration
 	PublishTimeout time.Duration
 	Integration    tbintegration.Config
+}
+
+const (
+	tbRelationSyncMinInterval = time.Minute
+	tbTopologySyncMinInterval = 30 * time.Second
+)
+
+type relationEnsurer interface {
+	EnsureContainsRelations(ctx context.Context, deviceNames []string) error
+}
+
+type topologyPublisher interface {
+	PublishIfChanged(ctx context.Context, snapshots []routes.RouteSnapshot) error
 }
 
 func parseConfig(cfg map[string]any) (thingsboardMQTTConfig, error) {
@@ -182,20 +196,19 @@ type genericMQTTClient interface {
 type ThingsBoardMQTTAdapter struct {
 	cfg    thingsboardMQTTConfig
 	client genericMQTTClient
-	obs    interface {
-		Update(batch []models.Telemetry)
-		UpdateStatus(status string, details string)
-	}
+	obs    base.AdapterObserver
 	rest   *tbintegration.Client
-	rels   *tbintegration.RelationReconciler
-	topo   *tbintegration.TopologyPublisher
+	rels   relationEnsurer
+	topo   topologyPublisher
 	alarms *tbintegration.AlarmManager
+
+	now                 func() time.Time
+	lastRelationSync    time.Time
+	lastTopologySync    time.Time
+	seenRelationDevices map[string]struct{}
 }
 
-func (a *ThingsBoardMQTTAdapter) SetObserver(hub interface {
-	Update(batch []models.Telemetry)
-	UpdateStatus(status string, details string)
-}) {
+func (a *ThingsBoardMQTTAdapter) SetObserver(hub base.AdapterObserver) {
 	a.obs = hub
 }
 
@@ -224,7 +237,7 @@ func NewAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, error) {
 	opts.SetCleanSession(true)
 
 	cli := mqtt.NewClient(opts)
-	adapter := &ThingsBoardMQTTAdapter{cfg: c, client: cli}
+	adapter := &ThingsBoardMQTTAdapter{cfg: c, client: cli, now: time.Now, seenRelationDevices: map[string]struct{}{}}
 	if c.Integration.API.BaseURL != "" && c.Integration.API.APIKey != "" && c.Integration.Site.AssetID != "" {
 		rest := tbintegration.NewClient(c.Integration.API)
 		adapter.rest = rest
@@ -328,22 +341,26 @@ func (a *ThingsBoardMQTTAdapter) runManagementSideEffects(ctx context.Context, b
 	}
 	deviceNames := uniqueDeviceNames(batch)
 	fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] management side-effects: devices=%d site=%s\n", len(deviceNames), a.cfg.Integration.Site.Key)
-	if a.rels != nil && len(deviceNames) > 0 {
+	if a.rels != nil && len(deviceNames) > 0 && a.shouldRunRelationSync(deviceNames) {
 		if err := a.rels.EnsureContainsRelations(ctx, deviceNames); err != nil {
 			fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] relation error: %v\n", err)
 			if a.obs != nil {
 				a.obs.UpdateStatus("tb_relation_warning", err.Error())
 			}
+		} else {
+			a.markRelationSync(deviceNames)
 		}
 	}
 	if a.topo != nil {
 		snapshots := routeSnapshotsFromBatch(batch)
-		if len(snapshots) > 0 {
+		if len(snapshots) > 0 && a.shouldRunTopologySync() {
 			if err := a.topo.PublishIfChanged(ctx, snapshots); err != nil {
 				fmt.Fprintf(os.Stderr, "[thingsboard_mqtt] topology error: %v\n", err)
 				if a.obs != nil {
 					a.obs.UpdateStatus("tb_topology_warning", err.Error())
 				}
+			} else {
+				a.markTopologySync()
 			}
 		}
 	}
@@ -355,6 +372,53 @@ func (a *ThingsBoardMQTTAdapter) runManagementSideEffects(ctx context.Context, b
 			}
 		}
 	}
+}
+
+func (a *ThingsBoardMQTTAdapter) shouldRunRelationSync(deviceNames []string) bool {
+	nowFn := a.now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+	now := nowFn()
+	if a.seenRelationDevices == nil {
+		a.seenRelationDevices = map[string]struct{}{}
+	}
+	for _, name := range deviceNames {
+		if _, ok := a.seenRelationDevices[name]; !ok {
+			return true
+		}
+	}
+	return a.lastRelationSync.IsZero() || now.Sub(a.lastRelationSync) >= tbRelationSyncMinInterval
+}
+
+func (a *ThingsBoardMQTTAdapter) markRelationSync(deviceNames []string) {
+	nowFn := a.now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+	if a.seenRelationDevices == nil {
+		a.seenRelationDevices = map[string]struct{}{}
+	}
+	for _, name := range deviceNames {
+		a.seenRelationDevices[name] = struct{}{}
+	}
+	a.lastRelationSync = nowFn()
+}
+
+func (a *ThingsBoardMQTTAdapter) shouldRunTopologySync() bool {
+	nowFn := a.now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+	return a.lastTopologySync.IsZero() || nowFn().Sub(a.lastTopologySync) >= tbTopologySyncMinInterval
+}
+
+func (a *ThingsBoardMQTTAdapter) markTopologySync() {
+	nowFn := a.now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+	a.lastTopologySync = nowFn()
 }
 
 func uniqueDeviceNames(batch []models.Telemetry) []string {

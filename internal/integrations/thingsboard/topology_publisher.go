@@ -10,10 +10,16 @@ import (
 )
 
 type TopologyPublisher struct {
-	Client *Client
+	Client topologyClient
 	Site   SiteConfig
 	mu     sync.Mutex
 	lastFP string
+	loaded bool
+}
+
+type topologyClient interface {
+	SaveAssetServerAttributes(ctx context.Context, assetID string, attrs map[string]any) error
+	GetAssetServerAttributes(ctx context.Context, assetID string, keys []string) (map[string]any, error)
 }
 
 func NewTopologyPublisher(client *Client, site SiteConfig) *TopologyPublisher {
@@ -25,6 +31,9 @@ func (p *TopologyPublisher) PublishIfChanged(ctx context.Context, snapshots []ro
 		return nil
 	}
 	topo := BuildSiteTopology(p.Site, snapshots)
+	if err := p.ensureLoaded(ctx); err != nil {
+		return err
+	}
 	p.mu.Lock()
 	if topo.Fingerprint == p.lastFP {
 		p.mu.Unlock()
@@ -44,4 +53,35 @@ func (p *TopologyPublisher) PublishIfChanged(ctx context.Context, snapshots []ro
 		"topology.logical.ipv4.updated_at":   topo.GeneratedAt.Format(time.RFC3339),
 	}
 	return p.Client.SaveAssetServerAttributes(ctx, p.Site.AssetID, attrs)
+}
+
+func (p *TopologyPublisher) ensureLoaded(ctx context.Context) error {
+	p.mu.Lock()
+	if p.loaded {
+		p.mu.Unlock()
+		return nil
+	}
+	p.mu.Unlock()
+
+	attrs, err := p.Client.GetAssetServerAttributes(ctx, p.Site.AssetID, []string{"topology.logical.ipv4.fingerprint"})
+	if err != nil {
+		p.mu.Lock()
+		p.loaded = true
+		p.mu.Unlock()
+		return nil
+	}
+
+	var fp string
+	if raw, ok := attrs["topology.logical.ipv4.fingerprint"]; ok {
+		if s, ok := raw.(string); ok {
+			fp = s
+		}
+	}
+	p.mu.Lock()
+	if p.lastFP == "" {
+		p.lastFP = fp
+	}
+	p.loaded = true
+	p.mu.Unlock()
+	return nil
 }

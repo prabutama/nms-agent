@@ -1,6 +1,7 @@
 package thingsboardmqtt
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 
 	"nms-agent/internal/models"
+	"nms-agent/internal/routes"
 )
 
 type fakeTBMQTTClient struct {
@@ -50,6 +52,36 @@ type fakeTBToken struct {
 	err    error
 	waitOK bool
 	done   chan struct{}
+}
+
+type fakeTBObserver struct {
+	updates  [][]models.Telemetry
+	statuses []string
+	details  []string
+}
+
+type fakeRelationEnsurer struct{ calls int }
+
+func (f *fakeRelationEnsurer) EnsureContainsRelations(_ context.Context, deviceNames []string) error {
+	f.calls++
+	return nil
+}
+
+type fakeTopologyPublisher struct{ calls int }
+
+func (f *fakeTopologyPublisher) PublishIfChanged(_ context.Context, snapshots []routes.RouteSnapshot) error {
+	f.calls++
+	return nil
+}
+
+func (o *fakeTBObserver) Update(batch []models.Telemetry) {
+	cp := append([]models.Telemetry(nil), batch...)
+	o.updates = append(o.updates, cp)
+}
+
+func (o *fakeTBObserver) UpdateStatus(status string, details string) {
+	o.statuses = append(o.statuses, status)
+	o.details = append(o.details, details)
 }
 
 func (t *fakeTBToken) Wait() bool                     { return t.waitOK }
@@ -95,6 +127,82 @@ func TestThingsBoardMQTTAdapter_DirectMode(t *testing.T) {
 	}
 }
 
+func TestThingsBoardMQTTAdapter_ObserverPublishedStatus(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	obs := &fakeTBObserver{}
+	a := &ThingsBoardMQTTAdapter{
+		cfg:    thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
+		client: fake,
+	}
+	a.SetObserver(obs)
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
+
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(obs.updates) != 1 {
+		t.Fatalf("expected 1 observer update, got %d", len(obs.updates))
+	}
+	if len(obs.statuses) != 1 {
+		t.Fatalf("expected 1 observer status, got %d", len(obs.statuses))
+	}
+	if obs.statuses[0] != "published" {
+		t.Fatalf("expected published status, got %q", obs.statuses[0])
+	}
+}
+
+func TestThingsBoardMQTTAdapter_ManagementSideEffectsGating(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	rels := &fakeRelationEnsurer{}
+	topo := &fakeTopologyPublisher{}
+	times := []time.Time{
+		time.Unix(100, 0),
+		time.Unix(100, 0),
+		time.Unix(110, 0),
+		time.Unix(110, 0),
+		time.Unix(161, 0),
+		time.Unix(161, 0),
+	}
+	idx := 0
+	nowFn := func() time.Time {
+		if idx >= len(times) {
+			return times[len(times)-1]
+		}
+		v := times[idx]
+		idx++
+		return v
+	}
+	a := &ThingsBoardMQTTAdapter{
+		cfg:                 thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
+		client:              fake,
+		rels:                rels,
+		topo:                topo,
+		now:                 nowFn,
+		seenRelationDevices: map[string]struct{}{},
+	}
+	batch := []models.Telemetry{
+		{DeviceID: "router-1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()},
+		{DeviceID: "router-1", Metric: "route.ipv4.snapshot", ValueType: "string", ValueString: stringPtrTB(routeSnapshotJSON()), TS: time.Now().UTC()},
+	}
+
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("first SendBatch: %v", err)
+	}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("second SendBatch: %v", err)
+	}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("third SendBatch: %v", err)
+	}
+
+	if rels.calls != 2 {
+		t.Fatalf("expected relation sync called 2 times, got %d", rels.calls)
+	}
+	if topo.calls != 2 {
+		t.Fatalf("expected topology sync called 2 times, got %d", topo.calls)
+	}
+}
+
 func TestThingsBoardMQTTAdapter_MultipleDevices(t *testing.T) {
 	fake := newFakeTBMQTTClient(true, true)
 	a := &ThingsBoardMQTTAdapter{
@@ -124,13 +232,21 @@ func TestThingsBoardMQTTAdapter_MultipleDevices(t *testing.T) {
 func TestThingsBoardMQTTAdapter_ConnectError(t *testing.T) {
 	fake := newFakeTBMQTTClient(false, false)
 	fake.connectToken = &fakeTBToken{waitOK: true, err: errors.New("connection refused")}
+	obs := &fakeTBObserver{}
 	a := &ThingsBoardMQTTAdapter{
 		cfg:    thingsboardMQTTConfig{Mode: "direct", AccessToken: "test", BrokerURL: "tcp://127.0.0.1:1883"},
 		client: fake,
 	}
+	a.SetObserver(obs)
 	batch := []models.Telemetry{{DeviceID: "d1", Metric: "m", ValueType: "number", ValueNumber: floatPtr(1), TS: time.Now().UTC()}}
 	if err := a.SendBatch(nil, batch); err == nil {
 		t.Fatalf("expected error")
+	}
+	if len(obs.statuses) != 1 {
+		t.Fatalf("expected 1 observer status, got %d", len(obs.statuses))
+	}
+	if obs.statuses[0] != "connect_failed" {
+		t.Fatalf("expected connect_failed status, got %q", obs.statuses[0])
 	}
 }
 
@@ -198,3 +314,9 @@ func TestThingsBoardMQTTAdapter_Close(t *testing.T) {
 }
 
 func floatPtr(v float64) *float64 { return &v }
+
+func stringPtrTB(v string) *string { return &v }
+
+func routeSnapshotJSON() string {
+	return `{"device_id":"router-1","address_family":"ipv4","supported":true,"routes":[{"device_id":"router-1","destination":"192.168.1.0/24","route_type":"connected"}]}`
+}

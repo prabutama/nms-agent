@@ -178,9 +178,7 @@ func run(args []string) int {
 			hub.SetSnapshot(telemetry)
 
 			// Wire live observer
-			if p, ok := ad.(interface {
-				SetObserver(interface{ Update([]models.Telemetry) })
-			}); ok {
+			if p, ok := ad.(adapters.ObserverSetter); ok {
 				p.SetObserver(hub)
 			}
 		}
