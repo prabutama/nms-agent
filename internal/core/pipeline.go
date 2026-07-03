@@ -91,10 +91,14 @@ func (p *Pipeline) RunOnce(ctx context.Context) error {
 
 	raw, err := p.collector.Collect(ctx)
 	if err != nil {
-		p.logError("collect_failed", "error", err.Error(), "duration", time.Since(cycleStart).String())
-		return err
+		if len(raw) == 0 {
+			p.logError("collect_failed", "error", err.Error(), "duration", time.Since(cycleStart).String())
+			return err
+		}
+		p.logWarn("collect_partial", "samples", len(raw), "error", err.Error(), "duration", time.Since(cycleStart).String())
+	} else {
+		p.logInfo("collect_done", "samples", len(raw), "duration", time.Since(cycleStart).String())
 	}
-	p.logInfo("collect_done", "samples", len(raw), "duration", time.Since(cycleStart).String())
 
 	telemetry, err := p.processor.Normalize(ctx, raw)
 	if err != nil {

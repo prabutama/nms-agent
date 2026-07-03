@@ -41,6 +41,28 @@ func (testProcessor) Normalize(context.Context, []models.RawSample) ([]models.Te
 	}}, nil
 }
 
+type partialFailCollector struct{}
+
+func (partialFailCollector) Collect(context.Context) ([]models.RawSample, error) {
+	return []models.RawSample{{
+		DeviceID: "d1",
+		Source:   "dummy",
+		TS:       time.Now().UTC(),
+		Fields: map[string]any{
+			"metric":       "demo.ping",
+			"value_type":   "number",
+			"value_number": 7.0,
+			"unit":         "ms",
+		},
+	}}, errors.New("icmp timeout")
+}
+
+type failedCollector struct{}
+
+func (failedCollector) Collect(context.Context) ([]models.RawSample, error) {
+	return nil, errors.New("all collectors failed")
+}
+
 type failingAdapter struct{}
 
 func (failingAdapter) SendBatch(context.Context, []models.Telemetry) error {
@@ -91,6 +113,64 @@ func TestPipeline_EnqueueBeforeSend_SQLite(t *testing.T) {
 	}
 	if items2[0].RetryCount != 1 {
 		t.Fatalf("expected retry_count=1 after restart, got %d", items2[0].RetryCount)
+	}
+}
+
+func TestPipeline_PartialCollectFailure_StillProcessesSamples(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "queue.db")
+
+	q, err := queue.OpenSQLite(dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	defer q.Close()
+
+	adapter := &capturingAdapter{}
+	p := NewPipeline(partialFailCollector{}, testProcessor{}, q, adapter, DeliveryConfig{MaxBatch: 10})
+	if err := p.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	if len(adapter.sent) != 1 {
+		t.Fatalf("expected 1 sent item, got %d", len(adapter.sent))
+	}
+
+	items, err := q.PendingBatch(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("PendingBatch: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected queue empty after successful send, got %d", len(items))
+	}
+}
+
+func TestPipeline_CollectFailureWithoutSamples_Fails(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "queue.db")
+
+	q, err := queue.OpenSQLite(dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	defer q.Close()
+
+	adapter := &capturingAdapter{}
+	p := NewPipeline(failedCollector{}, testProcessor{}, q, adapter, DeliveryConfig{MaxBatch: 10})
+	if err := p.RunOnce(context.Background()); err == nil {
+		t.Fatalf("expected error")
+	}
+
+	if len(adapter.sent) != 0 {
+		t.Fatalf("expected no sent items, got %d", len(adapter.sent))
+	}
+
+	items, err := q.PendingBatch(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("PendingBatch: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected queue empty after collect failure, got %d", len(items))
 	}
 }
 
