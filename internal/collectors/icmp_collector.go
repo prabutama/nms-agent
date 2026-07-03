@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"nms-agent/internal/models"
@@ -23,6 +24,8 @@ type ICMPCollector struct {
 	Count int
 	// Timeout bounds one ping command execution per target.
 	Timeout time.Duration
+	// Concurrency bounds concurrent per-target pings.
+	Concurrency int
 
 	// Exec is injectable for tests.
 	Exec func(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -53,34 +56,66 @@ func (c ICMPCollector) Collect(ctx context.Context) ([]models.RawSample, error) 
 	}
 
 	now := time.Now().UTC()
-	out := make([]models.RawSample, 0, len(c.Targets)*2)
-	for _, t := range c.Targets {
-		if t.DeviceID == "" || t.Address == "" {
-			continue
-		}
+	workers := c.Concurrency
+	if workers <= 0 {
+		workers = 8
+	}
+	if workers > len(c.Targets) {
+		workers = len(c.Targets)
+	}
+	if workers <= 0 {
+		workers = 1
+	}
 
-		dctx, cancel := context.WithTimeout(ctx, to)
-		b, err := execFn(dctx, "ping", pingArgs(t.Address, count, to)...)
-		cancel()
+	targetCh := make(chan Target)
+	resultCh := make(chan []models.RawSample, len(c.Targets))
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for t := range targetCh {
+				if t.DeviceID == "" || t.Address == "" {
+					continue
+				}
+				deviceSamples := make([]models.RawSample, 0, 4)
+				dctx, cancel := context.WithTimeout(ctx, to)
+				b, err := execFn(dctx, "ping", pingArgs(t.Address, count, to)...)
+				cancel()
 
-		text := string(b)
-		reachable := 1.0
-		if err != nil {
-			reachable = 0.0
-		}
-		out = append(out, rawMetric(t.DeviceID, "icmp", now, "icmp.reachable", reachable, ""))
+				text := string(b)
+				reachable := 1.0
+				if err != nil {
+					reachable = 0.0
+				}
+				deviceSamples = append(deviceSamples, rawMetric(t.DeviceID, "icmp", now, "icmp.reachable", reachable, ""))
 
-		// Parse latency/loss best-effort; partial snapshot is ok.
-		if lats := parsePingLatenciesMS(text); len(lats) > 0 {
-			avg, jitter := summarizeLatencies(lats)
-			out = append(out, rawMetric(t.DeviceID, "icmp", now, "icmp.latency_ms", avg, "ms"))
-			if c.Count > 1 {
-				out = append(out, rawMetric(t.DeviceID, "icmp", now, "icmp.jitter_ms", jitter, "ms"))
+				if lats := parsePingLatenciesMS(text); len(lats) > 0 {
+					avg, jitter := summarizeLatencies(lats)
+					deviceSamples = append(deviceSamples, rawMetric(t.DeviceID, "icmp", now, "icmp.latency_ms", avg, "ms"))
+					if c.Count > 1 {
+						deviceSamples = append(deviceSamples, rawMetric(t.DeviceID, "icmp", now, "icmp.jitter_ms", jitter, "ms"))
+					}
+				}
+				if loss, ok := parsePingLossPct(text); ok {
+					deviceSamples = append(deviceSamples, rawMetric(t.DeviceID, "icmp", now, "icmp.packet_loss_pct", loss, "pct"))
+				}
+				resultCh <- deviceSamples
 			}
+		}()
+	}
+	go func() {
+		for _, t := range c.Targets {
+			targetCh <- t
 		}
-		if loss, ok := parsePingLossPct(text); ok {
-			out = append(out, rawMetric(t.DeviceID, "icmp", now, "icmp.packet_loss_pct", loss, "pct"))
-		}
+		close(targetCh)
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	out := make([]models.RawSample, 0, len(c.Targets)*2)
+	for batch := range resultCh {
+		out = append(out, batch...)
 	}
 	return out, nil
 }

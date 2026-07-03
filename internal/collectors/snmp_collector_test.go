@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -213,5 +214,71 @@ func TestSNMPCollector_UsesLoadedProfileMetrics(t *testing.T) {
 		t.Fatalf("missing snmp.if.oper_status")
 	} else if tags["ifIndex"] != "7" {
 		t.Fatalf("expected ifIndex=7, got %v", tags)
+	}
+}
+
+func TestSNMPCollector_CollectsTargetsConcurrently(t *testing.T) {
+	var current int32
+	var maxSeen int32
+	started := make(chan struct{}, 8)
+	release := make(chan struct{})
+	c := SNMPCollector{
+		Targets: []Target{
+			{DeviceID: "d1", Address: "127.0.0.1", Vendor: "example", Model: "router"},
+			{DeviceID: "d2", Address: "127.0.0.2", Vendor: "example", Model: "router"},
+			{DeviceID: "d3", Address: "127.0.0.3", Vendor: "example", Model: "router"},
+		},
+		Profiles: []profiles.Profile{{
+			Name:    "standard",
+			Match:   profiles.Match{},
+			Metrics: []profiles.Metric{{Metric: "snmp.system.description", OID: "1.3.6.1.2.1.1.1.0", Type: "get"}},
+		}},
+		Concurrency: 3,
+		NewClient: func(t Target, cfg snmpClientConfig) snmpClient {
+			_ = t
+			_ = cfg
+			return fakeSNMPClient{
+				getFn: func(oids []string) (*g.SnmpPacket, error) {
+					_ = oids
+					cur := atomic.AddInt32(&current, 1)
+					for {
+						max := atomic.LoadInt32(&maxSeen)
+						if cur <= max || atomic.CompareAndSwapInt32(&maxSeen, max, cur) {
+							break
+						}
+					}
+					started <- struct{}{}
+					<-release
+					atomic.AddInt32(&current, -1)
+					return &g.SnmpPacket{Variables: []g.SnmpPDU{{
+						Name:  "1.3.6.1.2.1.1.1.0",
+						Type:  g.OctetString,
+						Value: []byte("RouterOS CHR"),
+					}}}, nil
+				},
+			}
+		},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = c.Collect(context.Background())
+	}()
+	for i := 0; i < 3; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatalf("timeout waiting for worker %d", i+1)
+		}
+	}
+	if atomic.LoadInt32(&maxSeen) < 2 {
+		t.Fatalf("expected concurrent SNMP get, maxSeen=%d", atomic.LoadInt32(&maxSeen))
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatalf("collect did not finish")
 	}
 }

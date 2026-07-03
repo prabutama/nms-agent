@@ -380,12 +380,13 @@ func buildCollector(mode string, loaded config.Loaded) (collectors.Collector, er
 	}
 
 	// real or auto-with-targets: combine enabled collectors.
+	collectionCfg := loaded.Root.Agent.Collection.WithDefaults()
 	colList := make([]collectors.Collector, 0, 2)
 	if len(icmpTargets) > 0 {
-		colList = append(colList, collectors.ICMPCollector{Targets: icmpTargets, Count: 2})
+		colList = append(colList, collectors.ICMPCollector{Targets: icmpTargets, Count: 2, Concurrency: collectionCfg.ICMPConcurrency})
 	}
 	if len(snmpTargets) > 0 {
-		colList = append(colList, collectors.SNMPCollector{Targets: snmpTargets})
+		colList = append(colList, collectors.SNMPCollector{Targets: snmpTargets, Concurrency: collectionCfg.SNMPConcurrency})
 		colList = append(colList, routes.Collector{Targets: snmpTargets, Cache: routes.NewChangeCache()})
 	}
 	return combinedCollector{collectors: colList}, nil

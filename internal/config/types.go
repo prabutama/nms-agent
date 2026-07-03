@@ -19,8 +19,29 @@ type Root struct {
 type Agent struct {
 	PollInterval time.Duration `yaml:"poll_interval"`
 	Delivery     Delivery      `yaml:"delivery"`
+	Collection   Collection    `yaml:"collection"`
 	Output       Output        `yaml:"output"`
 	Logging      Logging       `yaml:"logging"`
+}
+
+type Collection struct {
+	SNMPConcurrency  int `yaml:"snmp_concurrency"`
+	ICMPConcurrency  int `yaml:"icmp_concurrency"`
+	RouteConcurrency int `yaml:"route_concurrency"`
+}
+
+func (c Collection) WithDefaults() Collection {
+	out := c
+	if out.SNMPConcurrency <= 0 {
+		out.SNMPConcurrency = 4
+	}
+	if out.ICMPConcurrency <= 0 {
+		out.ICMPConcurrency = 8
+	}
+	if out.RouteConcurrency <= 0 {
+		out.RouteConcurrency = 4
+	}
+	return out
 }
 
 // Output configures presentation-only output settings.

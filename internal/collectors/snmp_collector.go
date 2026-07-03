@@ -2,6 +2,7 @@ package collectors
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	g "github.com/gosnmp/gosnmp"
@@ -16,11 +17,12 @@ type SNMPCollector struct {
 	Targets  []Target
 	Profiles []profiles.Profile
 
-	Community string
-	Version   g.SnmpVersion
-	Port      uint16
-	Timeout   time.Duration
-	Retries   int
+	Community   string
+	Version     g.SnmpVersion
+	Port        uint16
+	Timeout     time.Duration
+	Retries     int
+	Concurrency int
 
 	// NewClient is injectable for tests.
 	NewClient func(t Target, cfg snmpClientConfig) snmpClient
@@ -82,55 +84,90 @@ func (c SNMPCollector) Collect(ctx context.Context) ([]models.RawSample, error) 
 	}
 
 	now := time.Now().UTC()
-	out := make([]models.RawSample, 0, len(c.Targets))
-	for _, t := range c.Targets {
-		if t.DeviceID == "" || t.Address == "" {
-			continue
-		}
-		profile, ok := profiles.SelectProfile(profs, t.Vendor, t.Model)
-		if !ok {
-			continue
-		}
-		cli := newClient(t, snmpClientConfig{
-			Community: community,
-			Version:   ver,
-			Port:      port,
-			Timeout:   deadlineTo,
-			Retries:   retries,
-		})
-		func() {
-			if err := cli.Connect(); err != nil {
-				// Partial snapshot: skip device without failing the whole pass.
-				return
-			}
-			defer func() { _ = cli.Close() }()
+	workers := c.Concurrency
+	if workers <= 0 {
+		workers = 4
+	}
+	if workers > len(c.Targets) {
+		workers = len(c.Targets)
+	}
+	if workers <= 0 {
+		workers = 1
+	}
 
-			for _, m := range profile.Metrics {
-				if m.Type == "get" {
-					pkt, err := cli.Get([]string{m.OID})
-					if err != nil {
-						continue
-					}
-					for _, v := range pkt.Variables {
-						out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, v, m.Unit, nil))
-					}
+	targetCh := make(chan Target)
+	resultCh := make(chan []models.RawSample, len(c.Targets))
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for t := range targetCh {
+				if t.DeviceID == "" || t.Address == "" {
 					continue
 				}
+				profile, ok := profiles.SelectProfile(profs, t.Vendor, t.Model)
+				if !ok {
+					continue
+				}
+				cli := newClient(t, snmpClientConfig{
+					Community: community,
+					Version:   ver,
+					Port:      port,
+					Timeout:   deadlineTo,
+					Retries:   retries,
+				})
+				deviceSamples := make([]models.RawSample, 0, len(profile.Metrics))
+				func() {
+					if err := cli.Connect(); err != nil {
+						return
+					}
+					defer func() { _ = cli.Close() }()
 
-				if m.Type == "walk" {
-					_ = cli.Walk(m.OID, func(p g.SnmpPDU) error {
-						var tags map[string]string
-						if m.Index {
-							if idx, ok := oidIndexSuffix(p.Name); ok {
-								tags = map[string]string{"ifIndex": idx}
+					for _, m := range profile.Metrics {
+						if m.Type == "get" {
+							pkt, err := cli.Get([]string{m.OID})
+							if err != nil {
+								continue
 							}
+							for _, v := range pkt.Variables {
+								deviceSamples = append(deviceSamples, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, v, m.Unit, nil))
+							}
+							continue
 						}
-						out = append(out, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, p, m.Unit, tags))
-						return nil
-					})
+
+						if m.Type == "walk" {
+							_ = cli.Walk(m.OID, func(p g.SnmpPDU) error {
+								var tags map[string]string
+								if m.Index {
+									if idx, ok := oidIndexSuffix(p.Name); ok {
+										tags = map[string]string{"ifIndex": idx}
+									}
+								}
+								deviceSamples = append(deviceSamples, rawMetricWithTags(t.DeviceID, "snmp", now, m.Metric, p, m.Unit, tags))
+								return nil
+							})
+						}
+					}
+				}()
+				if len(deviceSamples) > 0 {
+					resultCh <- deviceSamples
 				}
 			}
 		}()
+	}
+	go func() {
+		for _, t := range c.Targets {
+			targetCh <- t
+		}
+		close(targetCh)
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	out := make([]models.RawSample, 0, len(c.Targets))
+	for batch := range resultCh {
+		out = append(out, batch...)
 	}
 	return out, nil
 }

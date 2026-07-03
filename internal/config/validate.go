@@ -19,6 +19,15 @@ func Validate(cfg Loaded) error {
 	if cfg.Root.Agent.PollInterval <= 0 {
 		errs = append(errs, "agent.poll_interval must be > 0")
 	}
+	if cfg.Root.Agent.Collection.SNMPConcurrency < 0 {
+		errs = append(errs, "agent.collection.snmp_concurrency must be >= 0")
+	}
+	if cfg.Root.Agent.Collection.ICMPConcurrency < 0 {
+		errs = append(errs, "agent.collection.icmp_concurrency must be >= 0")
+	}
+	if cfg.Root.Agent.Collection.RouteConcurrency < 0 {
+		errs = append(errs, "agent.collection.route_concurrency must be >= 0")
+	}
 	// Logging config is optional; validate if provided.
 	if lvl := strings.TrimSpace(cfg.Root.Agent.Logging.Level); lvl != "" {
 		switch lvl {
