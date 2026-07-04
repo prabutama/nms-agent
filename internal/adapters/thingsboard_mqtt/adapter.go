@@ -206,10 +206,29 @@ type ThingsBoardMQTTAdapter struct {
 	lastRelationSync    time.Time
 	lastTopologySync    time.Time
 	seenRelationDevices map[string]struct{}
+	deviceAddresses     map[string]string
+	sentDeviceAddresses map[string]string
 }
 
 func (a *ThingsBoardMQTTAdapter) SetObserver(hub base.AdapterObserver) {
 	a.obs = hub
+}
+
+func (a *ThingsBoardMQTTAdapter) SetDeviceAddresses(addresses map[string]string) {
+	if a == nil {
+		return
+	}
+	cp := map[string]string{}
+	for k, v := range addresses {
+		if k == "" || v == "" {
+			continue
+		}
+		cp[k] = v
+	}
+	a.deviceAddresses = cp
+	if a.sentDeviceAddresses == nil {
+		a.sentDeviceAddresses = map[string]string{}
+	}
 }
 
 func NewAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, error) {
@@ -237,7 +256,7 @@ func NewAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, error) {
 	opts.SetCleanSession(true)
 
 	cli := mqtt.NewClient(opts)
-	adapter := &ThingsBoardMQTTAdapter{cfg: c, client: cli, now: time.Now, seenRelationDevices: map[string]struct{}{}}
+	adapter := &ThingsBoardMQTTAdapter{cfg: c, client: cli, now: time.Now, seenRelationDevices: map[string]struct{}{}, deviceAddresses: map[string]string{}, sentDeviceAddresses: map[string]string{}}
 	if c.Integration.API.BaseURL != "" && c.Integration.API.APIKey != "" && c.Integration.Site.AssetID != "" {
 		rest := tbintegration.NewClient(c.Integration.API)
 		adapter.rest = rest
@@ -300,6 +319,7 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	if err != nil {
 		return err
 	}
+	attrPayload = a.mergeDeviceAddressAttributes(attrPayload, batch)
 	b, err := json.Marshal(telemetryPayload)
 	if err != nil {
 		return fmt.Errorf("marshal thingsboard payload: %w", err)
@@ -326,6 +346,7 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		if err := attrTok.Error(); err != nil {
 			return fmt.Errorf("mqtt publish attributes: %w", err)
 		}
+		a.markDeviceAddressAttributesSent(attrPayload)
 	}
 	if a.obs != nil {
 		a.obs.Update(batch)
@@ -333,6 +354,47 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	}
 	a.runManagementSideEffects(ctx, batch)
 	return nil
+}
+
+func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(attrPayload map[string]map[string]any, batch []models.Telemetry) map[string]map[string]any {
+	if len(batch) == 0 || len(a.deviceAddresses) == 0 {
+		return attrPayload
+	}
+	if attrPayload == nil {
+		attrPayload = map[string]map[string]any{}
+	}
+	if a.sentDeviceAddresses == nil {
+		a.sentDeviceAddresses = map[string]string{}
+	}
+	for _, deviceID := range uniqueDeviceNames(batch) {
+		address := a.deviceAddresses[deviceID]
+		if address == "" || a.sentDeviceAddresses[deviceID] == address {
+			continue
+		}
+		deviceAttrs := attrPayload[deviceID]
+		if deviceAttrs == nil {
+			deviceAttrs = map[string]any{}
+		}
+		deviceAttrs["ip_address"] = address
+		attrPayload[deviceID] = deviceAttrs
+	}
+	return attrPayload
+}
+
+func (a *ThingsBoardMQTTAdapter) markDeviceAddressAttributesSent(attrPayload map[string]map[string]any) {
+	if len(attrPayload) == 0 {
+		return
+	}
+	if a.sentDeviceAddresses == nil {
+		a.sentDeviceAddresses = map[string]string{}
+	}
+	for deviceID, attrs := range attrPayload {
+		ip, ok := attrs["ip_address"].(string)
+		if !ok || ip == "" {
+			continue
+		}
+		a.sentDeviceAddresses[deviceID] = ip
+	}
 }
 
 func (a *ThingsBoardMQTTAdapter) runManagementSideEffects(ctx context.Context, batch []models.Telemetry) {

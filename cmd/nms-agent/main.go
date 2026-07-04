@@ -162,6 +162,9 @@ func run(args []string) int {
 		if err != nil {
 			return nil, nil, err
 		}
+		if p, ok := ad.(interface{ SetDeviceAddresses(map[string]string) }); ok {
+			p.SetDeviceAddresses(deviceAddressMap(cfg.Devices))
+		}
 		if hub != nil {
 			hub.SetAdapter(cfg.Adapters.Adapters.Active)
 			hub.SetActiveDevices(activeDeviceIDs(cfg.Devices))
@@ -423,6 +426,17 @@ func activeDeviceIDSet(devices []config.Device) map[string]struct{} {
 			continue
 		}
 		out[d.ID] = struct{}{}
+	}
+	return out
+}
+
+func deviceAddressMap(devices []config.Device) map[string]string {
+	out := make(map[string]string, len(devices))
+	for _, d := range devices {
+		if d.ID == "" || d.Address == "" {
+			continue
+		}
+		out[d.ID] = d.Address
 	}
 	return out
 }

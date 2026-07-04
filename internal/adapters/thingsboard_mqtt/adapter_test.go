@@ -127,6 +127,101 @@ func TestThingsBoardMQTTAdapter_DirectMode(t *testing.T) {
 	}
 }
 
+func TestThingsBoardMQTTAdapter_PublishesIPAddressAttribute(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	a := &ThingsBoardMQTTAdapter{
+		cfg:                 thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
+		client:              fake,
+		deviceAddresses:     map[string]string{"d1": "192.168.1.1"},
+		sentDeviceAddresses: map[string]string{},
+	}
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
+
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(fake.publishes) != 2 {
+		t.Fatalf("expected 2 publishes, got %d", len(fake.publishes))
+	}
+	if fake.publishes[1].topic != tbGatewayAttributesTopic {
+		t.Fatalf("expected attributes topic, got %q", fake.publishes[1].topic)
+	}
+	var payload map[string]map[string]any
+	if err := json.Unmarshal(fake.publishes[1].payload, &payload); err != nil {
+		t.Fatalf("decode attr payload: %v", err)
+	}
+	deviceAttrs := payload["d1"]
+	if deviceAttrs == nil {
+		t.Fatalf("expected attributes for d1")
+	}
+	if deviceAttrs["ip_address"] != "192.168.1.1" {
+		t.Fatalf("expected ip_address=192.168.1.1, got %v", deviceAttrs["ip_address"])
+	}
+}
+
+func TestThingsBoardMQTTAdapter_DoesNotRepublishSameIPAddressAttribute(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	a := &ThingsBoardMQTTAdapter{
+		cfg:                 thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
+		client:              fake,
+		deviceAddresses:     map[string]string{"d1": "192.168.1.1"},
+		sentDeviceAddresses: map[string]string{},
+	}
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
+
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("first SendBatch: %v", err)
+	}
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("second SendBatch: %v", err)
+	}
+	attrPublishes := 0
+	for _, pub := range fake.publishes {
+		if pub.topic == tbGatewayAttributesTopic {
+			attrPublishes++
+		}
+	}
+	if attrPublishes != 1 {
+		t.Fatalf("expected 1 attributes publish, got %d", attrPublishes)
+	}
+}
+
+func TestThingsBoardMQTTAdapter_RepublishesIPAddressAttributeOnChange(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	a := &ThingsBoardMQTTAdapter{
+		cfg:                 thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
+		client:              fake,
+		deviceAddresses:     map[string]string{"d1": "192.168.1.1"},
+		sentDeviceAddresses: map[string]string{},
+	}
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
+
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("first SendBatch: %v", err)
+	}
+	a.SetDeviceAddresses(map[string]string{"d1": "192.168.1.2"})
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("second SendBatch: %v", err)
+	}
+	attrPublishes := make([]map[string]map[string]any, 0)
+	for _, pub := range fake.publishes {
+		if pub.topic != tbGatewayAttributesTopic {
+			continue
+		}
+		var payload map[string]map[string]any
+		if err := json.Unmarshal(pub.payload, &payload); err != nil {
+			t.Fatalf("decode attr payload: %v", err)
+		}
+		attrPublishes = append(attrPublishes, payload)
+	}
+	if len(attrPublishes) != 2 {
+		t.Fatalf("expected 2 attributes publishes, got %d", len(attrPublishes))
+	}
+	if attrPublishes[1]["d1"]["ip_address"] != "192.168.1.2" {
+		t.Fatalf("expected updated ip_address=192.168.1.2, got %v", attrPublishes[1]["d1"]["ip_address"])
+	}
+}
+
 func TestThingsBoardMQTTAdapter_ObserverPublishedStatus(t *testing.T) {
 	fake := newFakeTBMQTTClient(true, true)
 	obs := &fakeTBObserver{}
