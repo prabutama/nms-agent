@@ -159,6 +159,38 @@ func TestThingsBoardMQTTAdapter_PublishesIPAddressAttribute(t *testing.T) {
 	}
 }
 
+func TestThingsBoardMQTTAdapter_GatewayModeProjectsIPAddressIntoTelemetry(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	a := &ThingsBoardMQTTAdapter{
+		cfg:                 thingsboardMQTTConfig{Mode: "gateway", Topic: "nms-agent/thingsboard/telemetry"},
+		client:              fake,
+		deviceAddresses:     map[string]string{"d1": "192.168.1.1"},
+		sentDeviceAddresses: map[string]string{},
+	}
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
+
+	if err := a.SendBatch(nil, batch); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(fake.publishes) != 1 {
+		t.Fatalf("expected 1 publish in gateway mode, got %d", len(fake.publishes))
+	}
+	var payload map[string][]tbGatewayTelemetry
+	if err := json.Unmarshal(fake.publishes[0].payload, &payload); err != nil {
+		t.Fatalf("decode telemetry payload: %v", err)
+	}
+	entries := payload["d1"]
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 telemetry entry, got %d", len(entries))
+	}
+	if entries[0].Values["ip_address"] != "192.168.1.1" {
+		t.Fatalf("expected ip_address in telemetry payload, got %v", entries[0].Values["ip_address"])
+	}
+	if entries[0].Values["ip_address__value_type"] != "string" {
+		t.Fatalf("expected ip_address__value_type=string, got %v", entries[0].Values["ip_address__value_type"])
+	}
+}
+
 func TestThingsBoardMQTTAdapter_DoesNotRepublishSameIPAddressAttribute(t *testing.T) {
 	fake := newFakeTBMQTTClient(true, true)
 	a := &ThingsBoardMQTTAdapter{

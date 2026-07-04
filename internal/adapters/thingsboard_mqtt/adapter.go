@@ -319,7 +319,7 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	if err != nil {
 		return err
 	}
-	attrPayload = a.mergeDeviceAddressAttributes(attrPayload, batch)
+	a.mergeDeviceAddressAttributes(telemetryPayload, attrPayload, batch)
 	b, err := json.Marshal(telemetryPayload)
 	if err != nil {
 		return fmt.Errorf("marshal thingsboard payload: %w", err)
@@ -346,7 +346,7 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		if err := attrTok.Error(); err != nil {
 			return fmt.Errorf("mqtt publish attributes: %w", err)
 		}
-		a.markDeviceAddressAttributesSent(attrPayload)
+		a.markDeviceAddressAttributesSent(attrPayload, telemetryPayload)
 	}
 	if a.obs != nil {
 		a.obs.Update(batch)
@@ -356,12 +356,9 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	return nil
 }
 
-func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(attrPayload map[string]map[string]any, batch []models.Telemetry) map[string]map[string]any {
+func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(telemetryPayload map[string][]tbGatewayTelemetry, attrPayload map[string]map[string]any, batch []models.Telemetry) {
 	if len(batch) == 0 || len(a.deviceAddresses) == 0 {
-		return attrPayload
-	}
-	if attrPayload == nil {
-		attrPayload = map[string]map[string]any{}
+		return
 	}
 	if a.sentDeviceAddresses == nil {
 		a.sentDeviceAddresses = map[string]string{}
@@ -371,6 +368,19 @@ func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(attrPayload map[st
 		if address == "" || a.sentDeviceAddresses[deviceID] == address {
 			continue
 		}
+		if a.cfg.Mode == "gateway" {
+			entries := telemetryPayload[deviceID]
+			if len(entries) == 0 {
+				continue
+			}
+			entries[0].Values["ip_address"] = address
+			entries[0].Values["ip_address__value_type"] = "string"
+			telemetryPayload[deviceID] = entries
+			continue
+		}
+		if attrPayload == nil {
+			continue
+		}
 		deviceAttrs := attrPayload[deviceID]
 		if deviceAttrs == nil {
 			deviceAttrs = map[string]any{}
@@ -378,11 +388,10 @@ func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(attrPayload map[st
 		deviceAttrs["ip_address"] = address
 		attrPayload[deviceID] = deviceAttrs
 	}
-	return attrPayload
 }
 
-func (a *ThingsBoardMQTTAdapter) markDeviceAddressAttributesSent(attrPayload map[string]map[string]any) {
-	if len(attrPayload) == 0 {
+func (a *ThingsBoardMQTTAdapter) markDeviceAddressAttributesSent(attrPayload map[string]map[string]any, telemetryPayload map[string][]tbGatewayTelemetry) {
+	if len(attrPayload) == 0 && len(telemetryPayload) == 0 {
 		return
 	}
 	if a.sentDeviceAddresses == nil {
@@ -390,6 +399,16 @@ func (a *ThingsBoardMQTTAdapter) markDeviceAddressAttributesSent(attrPayload map
 	}
 	for deviceID, attrs := range attrPayload {
 		ip, ok := attrs["ip_address"].(string)
+		if !ok || ip == "" {
+			continue
+		}
+		a.sentDeviceAddresses[deviceID] = ip
+	}
+	for deviceID, entries := range telemetryPayload {
+		if len(entries) == 0 {
+			continue
+		}
+		ip, ok := entries[0].Values["ip_address"].(string)
 		if !ok || ip == "" {
 			continue
 		}
