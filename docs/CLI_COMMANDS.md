@@ -1,5 +1,15 @@
 # NMS Agent CLI Command Examples
 
+Use `--config <path>` on every command. Current subcommands do not all share same built-in default config path.
+
+## Current Default Config Paths
+
+- `nms-agentctl status` -> `/etc/nms-agent/agent.yml`
+- `nms-agentctl adapter health` -> `/etc/nms-agent/agent.yml`
+- `nms-agentctl discovery ...` -> `/etc/nms-agent/agent.yml`
+- `nms-agentctl view` -> `/etc/nms-agent/agent.yml`
+- `nms-agentctl queue retry` -> `configs/agent.yml`
+
 ## Validate Config
 nms-agentctl validate --config configs/agent.yml
 
@@ -37,6 +47,12 @@ nms-agentctl device test --config configs/agent.yml --id router-2
 nms-agentctl queue status --config configs/agent.yml
 nms-agentctl queue retry --config configs/agent.yml --limit 100
 
+Notes:
+
+- `queue status` reads queue metadata from configured SQLite path.
+- `queue retry` is currently limited. When active adapter is empty or `tui`, it uses no-op delivery path. For other adapters, real redelivery is not implemented in this CLI yet.
+- Treat `queue retry` as diagnostic/development helper until real adapter delivery support is added.
+
 ## Adapter Commands
 nms-agentctl adapter health --config configs/agent.yml
 
@@ -64,6 +80,29 @@ nms-agentctl discovery run --config configs/agent.yml --subnet 192.168.10.0/24 -
 - Manual discovery always requires SNMP OK, `sysObjectID`, and known profile match before writing devices.
 - SNMP probe failures are shown as `SNMP_PROBE_FAILED` and skipped.
 - On Linux/systemd installs, discovery may be run as `root`; promoted device/profile files are re-owned to service user `nms-agent` before becoming final files.
+
+## View Command
+
+### View live daemon state summary
+nms-agentctl view --config /etc/nms-agent/agent.yml --mode summary
+
+Summary mode shows:
+
+- device totals: `total`, `up`, `down`, `unknown`
+- alert totals: `warning`, `critical`
+- metric total for latest telemetry batch: `Metrics: total=<n>`
+- last update timestamp
+- per-device table with `DEVICE`, `STATUS`, `LAST SEEN`, `LATENCY`, `LOSS`, `METRICS`, `ALERTS`
+- per-device `METRICS` count is number of telemetry metrics produced by that device in latest batch only, not cumulative
+
+### View raw live telemetry stream
+nms-agentctl view --config /etc/nms-agent/agent.yml --mode raw
+
+Notes:
+
+- `view` connects to local daemon socket `/run/nms-agent/view.sock`.
+- `view` requires running `nms-agent` daemon with viewer socket available.
+- This command is intended for Linux/Unix-style runtime environments.
 
 ## Threshold Commands
 

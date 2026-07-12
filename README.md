@@ -177,6 +177,12 @@ nms-agentctl discovery preview --config configs/agent.yml
 nms-agentctl discovery run --config configs/agent.yml
 ```
 
+Notes:
+
+- Always pass `--config` explicitly. Current subcommands do not all use same built-in default path.
+- `nms-agentctl queue retry` is currently limited. For empty or `tui` active adapter it uses no-op delivery; real adapter redelivery is not implemented for other adapters yet.
+- `nms-agentctl view` depends on local daemon socket `/run/nms-agent/view.sock` and is intended for Linux/systemd-style runtime environments.
+
 ## Architecture
 
 ```
@@ -218,6 +224,18 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues and fix
 ## Security
 
 See [docs/SECURITY.md](docs/SECURITY.md) for security guidelines.
+
+## Known Limitations
+
+- `nms-agentctl queue retry` does not yet perform real redelivery for non-`tui` adapters. Treat it as limited diagnostic/development helper, not full production replay mechanism.
+- `nms-agentctl view` requires running daemon that exposes `/run/nms-agent/view.sock`. This feature is Linux/Unix-oriented and is not portable native Windows runtime feature.
+- Default `--config` behavior is not yet uniform across all `nms-agentctl` subcommands. Use `--config <path>` on every command to avoid ambiguity.
+
+## Platform Notes
+
+- Linux with systemd is primary production target.
+- Windows and WSL are acceptable for development, configuration work, and most tests.
+- Local viewer socket features such as `nms-agentctl view` are designed around Unix-style runtime paths and service management.
 
 ## License
 

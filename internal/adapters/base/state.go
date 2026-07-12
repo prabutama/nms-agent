@@ -65,24 +65,27 @@ type StorageState struct {
 }
 
 type State struct {
-	Devices            map[string]DeviceState
-	Ifaces             map[string]IfaceState
-	DeviceAlerts       map[string][]AlertState
-	DeviceResourcesMap map[string]DeviceResources
-	Storage            map[string]map[string]StorageState
-	Alerts             map[string]AlertState
-	Cycle              int
-	LastSeen           time.Time
+	Devices               map[string]DeviceState
+	Ifaces                map[string]IfaceState
+	DeviceAlerts          map[string][]AlertState
+	DeviceResourcesMap    map[string]DeviceResources
+	Storage               map[string]map[string]StorageState
+	Alerts                map[string]AlertState
+	LastBatchMetricCounts map[string]int
+	LastBatchMetricTotal  int
+	Cycle                 int
+	LastSeen              time.Time
 }
 
 func NewState() *State {
 	return &State{
-		Devices:            make(map[string]DeviceState),
-		Ifaces:             make(map[string]IfaceState),
-		DeviceAlerts:       make(map[string][]AlertState),
-		DeviceResourcesMap: make(map[string]DeviceResources),
-		Storage:            make(map[string]map[string]StorageState),
-		Alerts:             make(map[string]AlertState),
+		Devices:               make(map[string]DeviceState),
+		Ifaces:                make(map[string]IfaceState),
+		DeviceAlerts:          make(map[string][]AlertState),
+		DeviceResourcesMap:    make(map[string]DeviceResources),
+		Storage:               make(map[string]map[string]StorageState),
+		Alerts:                make(map[string]AlertState),
+		LastBatchMetricCounts: make(map[string]int),
 	}
 }
 
@@ -94,10 +97,14 @@ func NewStateFromTelemetry(batch []models.Telemetry) *State {
 
 func (s *State) ApplyBatch(batch []models.Telemetry) {
 	s.LastSeen = time.Now().UTC()
+	s.LastBatchMetricCounts = make(map[string]int)
+	s.LastBatchMetricTotal = 0
 	for _, t := range batch {
 		if t.DeviceID == "" {
 			continue
 		}
+		s.LastBatchMetricCounts[t.DeviceID]++
+		s.LastBatchMetricTotal++
 		s.Cycle++
 
 		ds := s.Devices[t.DeviceID]
@@ -305,6 +312,14 @@ func (s *State) DeviceAlertCounts(deviceID string) (warning, critical int) {
 		}
 	}
 	return
+}
+
+func (s *State) DeviceMetricCount(deviceID string) int {
+	return s.LastBatchMetricCounts[deviceID]
+}
+
+func (s *State) TotalMetricCount() int {
+	return s.LastBatchMetricTotal
 }
 
 func (s *State) SortedDevices() []string {

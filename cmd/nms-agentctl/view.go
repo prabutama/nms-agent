@@ -102,14 +102,15 @@ func renderSummaryFromState(adapter string, st *adapters.State, loc *time.Locati
 	warning, critical := st.AlertCounts()
 	b.WriteString(fmt.Sprintf("  Devices: total=%d up=%d down=%d unknown=%d\n", total, up, down, unknown))
 	b.WriteString(fmt.Sprintf("  Alerts: warning=%d critical=%d\n", warning, critical))
+	b.WriteString(fmt.Sprintf("  Metrics: total=%d\n", st.TotalMetricCount()))
 
 	if st.LastSeen != (time.Time{}) {
 		b.WriteString(fmt.Sprintf("  Last update: %s\n", st.LastSeen.In(loc2).Format(time.RFC3339)))
 	}
 	if total > 0 {
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("  %-24s %-8s %-10s %-10s %-8s %-8s\n", "DEVICE", "STATUS", "LAST SEEN", "LATENCY", "LOSS", "ALERTS"))
-		b.WriteString(fmt.Sprintf("  %-24s %-8s %-10s %-10s %-8s %-8s\n", strings.Repeat("-", 24), strings.Repeat("-", 8), strings.Repeat("-", 10), strings.Repeat("-", 10), strings.Repeat("-", 8), strings.Repeat("-", 8)))
+		b.WriteString(fmt.Sprintf("  %-24s %-8s %-10s %-10s %-8s %-8s %-8s\n", "DEVICE", "STATUS", "LAST SEEN", "LATENCY", "LOSS", "METRICS", "ALERTS"))
+		b.WriteString(fmt.Sprintf("  %-24s %-8s %-10s %-10s %-8s %-8s %-8s\n", strings.Repeat("-", 24), strings.Repeat("-", 8), strings.Repeat("-", 10), strings.Repeat("-", 10), strings.Repeat("-", 8), strings.Repeat("-", 8), strings.Repeat("-", 8)))
 		for _, name := range st.SortedDevices() {
 			ds := st.Devices[name]
 			status := deviceStatus(ds)
@@ -137,7 +138,7 @@ func renderSummaryFromState(adapter string, st *adapters.State, loc *time.Locati
 				}
 				alerts = strings.Join(parts, " ")
 			}
-			b.WriteString(fmt.Sprintf("  %-24s %-8s %-10s %-10s %-8s %-8s\n", truncateText(name, 24), status, lastSeen, latency, loss, alerts))
+			b.WriteString(fmt.Sprintf("  %-24s %-8s %-10s %-10s %-8s %-8d %-8s\n", truncateText(name, 24), status, lastSeen, latency, loss, st.DeviceMetricCount(name), alerts))
 		}
 	}
 

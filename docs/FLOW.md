@@ -4,7 +4,7 @@ flowchart TD
 
     B --> B1[validate config]
     B --> B2[queue status]
-    B --> B3[queue retry]
+    B --> B3[limited queue retry helper]
     B --> B4[view / discover]
 
     B1 --> D[Config Loader]
@@ -59,4 +59,9 @@ flowchart TD
     AA --> A
 
     B3 --> AB[PendingBatch]
-    AB --> S
+    AB --> AC{Active adapter}
+    AC -->|empty or tui| AD[No-op delivery path]
+    AC -->|other adapter| AE[Adapter not implemented in CLI retry]
+
+%% Runtime daemon delivery path is full pipeline behavior.
+%% `nms-agentctl queue retry` is currently a limited helper and is not a general adapter replay path.

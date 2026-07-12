@@ -39,8 +39,8 @@
 | `cmd/nms-agentctl/reload_signal_unix.go` | Platform helper (non-Windows): kirim SIGHUP ke proses agent.                                                                          |
 | `cmd/nms-agentctl/reload_signal_windows.go` | Platform helper (Windows): reload via signal tidak didukung (arahkan pakai WSL/Linux).                                                 |
 | `cmd/nms-agentctl/queue_status.go` | Implementasi `nms-agentctl queue status` untuk menampilkan ringkasan queue SQLite (pending + max retry).                                    |
-| `cmd/nms-agentctl/queue_retry.go` | Implementasi `nms-agentctl queue retry` untuk mencoba mengirim batch pending dari SQLite queue lalu ack (delivered) atau increment retry (failed). |
-| `cmd/nms-agentctl/queue_retry_test.go` | Test CLI queue retry: seed SQLite queue lalu pastikan item pending terkirim dan terhapus.                                                |
+| `cmd/nms-agentctl/queue_retry.go` | Implementasi helper terbatas `nms-agentctl queue retry`: ambil batch pending dari SQLite queue lalu ack (delivered) atau increment retry (failed) sesuai implementasi adapter retry CLI saat ini. |
+| `cmd/nms-agentctl/queue_retry_test.go` | Test helper queue retry: seed SQLite queue lalu pastikan item pending diproses sesuai implementasi retry CLI saat ini.                 |
 | `cmd/nms-agentctl/threshold.go` | Implementasi `nms-agentctl threshold list` dan `threshold set`. List baca thresholds.yml dan print rules. Set upsert by metric+tags match, tulis atomic ke YAML. |
 | `cmd/nms-agentctl/device.go`   | Implementasi `nms-agentctl device` subcommands: list/add/update/remove/test (validasi + atomic write/rollback, sanitasi input wizard, validasi id/address/vendor/model). |
 | `cmd/nms-agentctl/device_test.go` | Unit test device CLI: add/update/remove (write file baru, update field, hapus file) dan cek duplikasi id.                                       |

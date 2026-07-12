@@ -64,7 +64,7 @@ sudo nms-agent run --config configs/agent.yml --collector-mode real
 
 **Fix:**
 - Check network connectivity to the device
-- Increase SNMP timeout in device profile if supported
+- For manual discovery, increase timeout with discovery config or CLI override such as `--timeout 5s`
 - Verify device SNMP agent is responsive
 
 ```bash
@@ -103,6 +103,18 @@ nms-agentctl queue status --config configs/agent.yml
 ```bash
 nms-agentctl queue retry --config configs/agent.yml
 ```
+
+### Queue retry returns adapter not implemented
+
+**Error:** `adapter not implemented: <name>`
+
+**Cause:** `nms-agentctl queue retry` does not yet implement real redelivery for non-`tui` adapters.
+
+**Fix:**
+- Treat `queue retry` as limited helper, not general replay mechanism.
+- Restore normal adapter connectivity first, then let daemon continue normal delivery.
+- Inspect queue contents and adapter config before retry attempts.
+- Always pass `--config` explicitly because default config path is not uniform across subcommands.
 
 ## Adapter Errors
 
@@ -182,6 +194,19 @@ journalctl -u nms-agent -n 100 --no-pager
 - Verify SIGHUP handler is compiled (Unix builds only)
 - Check agent logs for reload messages
 - Verify config validation passes before reload
+
+## Viewer Errors
+
+### View command cannot connect to daemon
+
+**Error:** `connect to daemon: ...`
+
+**Fix:**
+- Ensure `nms-agent run ...` is currently running.
+- Verify socket exists at `/run/nms-agent/view.sock`.
+- On systemd installs, verify service is active and `RuntimeDirectory=nms-agent` is present.
+- Treat `nms-agentctl view` as Linux/Unix-oriented runtime feature.
+- Pass `--config` explicitly even though viewer currently uses fixed socket path.
 
 ## Performance Issues
 

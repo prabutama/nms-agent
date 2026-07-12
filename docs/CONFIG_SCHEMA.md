@@ -1,4 +1,4 @@
-# Phase 2 — Configuration Schema (MVP)
+# Configuration Schema
 
 The configuration is YAML-based and split into multiple files.
 
@@ -6,8 +6,10 @@ The configuration is YAML-based and split into multiple files.
 
 - `configs/agent.yml`: main entrypoint config.
 - `configs/devices.d/*.yml`: device inventory entries.
-- `configs/thresholds.yml`: placeholder for Phase 7 (loaded/validated for structure only in Phase 2).
-- `configs/adapters.yml`: placeholder for adapter selection/config (loaded/validated for structure only in Phase 2).
+- `configs/thresholds.yml`: active threshold rules consumed by runtime preprocessing.
+- `configs/adapters.yml`: active adapter selection/config consumed by runtime delivery pipeline.
+
+This document describes current configuration behavior, not phase-history snapshot.
 
 ## configs/agent.yml
 
@@ -63,6 +65,7 @@ Notes:
 - Known profile matches are promoted to `devices.d` with `0600` file permission.
 - On Linux/systemd installs, discovery CLI may run as `root`; promoted device/profile artifacts are re-owned to service user `nms-agent` before rename so daemon can read them.
 - Perubahan file `devices.d/*.yml` sekarang dipantau daemon; jika file device ditambah/diubah/dihapus dan config valid, runtime akan reload otomatis tanpa restart service.
+- Current CLI subcommands do not all use same built-in default `--config` path. For consistent behavior, pass `--config <path>` explicitly.
 
 ## configs/devices.d/*.yml
 
@@ -96,6 +99,8 @@ thresholds:
       source: icmp
 ```
 
+This file is active in current runtime. Threshold rules are loaded and applied by preprocessing before adapter delivery.
+
 ## configs/adapters.yml
 
 ```yaml
@@ -103,6 +108,8 @@ adapters:
   active: tui
   configs: {}
 ```
+
+This file is active in current runtime. Adapter selection and adapter config are loaded into pipeline startup and reload paths.
 
 Supported adapter names:
 

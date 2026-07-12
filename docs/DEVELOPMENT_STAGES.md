@@ -1,5 +1,16 @@
 # Development Stages — Platform-Agnostic NMS Agent
 
+Historical development log only.
+
+If this file conflicts with current behavior, follow `README.md`, `docs/CLI_COMMANDS.md`, and current code.
+
+Current operational source of truth:
+
+- `README.md`
+- `docs/CLI_COMMANDS.md`
+- `docs/CONFIG_SCHEMA.md`
+- current code in `cmd/` and `internal/`
+
 This document defines the development stages for the NMS Agent project. The AI coding agent must update this document whenever a task is started, completed, blocked, revised, or when the development scope changes.
 
 ## Status Legend
@@ -131,7 +142,7 @@ For every implementation task, the AI coding agent must:
 | Implement retry count | Retry attempts are tracked | DONE | `MarkFailed` increments `retry_count` |
 | Implement TTL cleanup | Old data can expire | TODO | |
 | Add queue status CLI | `nms-agentctl queue status` | DONE | Prints pending count and max retry_count |
-| Add retry CLI | `nms-agentctl queue retry` | DONE | Retries pending batch and ACKs by IDs |
+| Add retry CLI | `nms-agentctl queue retry` | DONE | Limited CLI helper: retries pending batch through current implementation and ACKs by IDs on success |
 | Add queue persistence test | Data survives service restart | DONE | Unit tests for restart persistence |
 
 **Exit Criteria:**
@@ -1702,7 +1713,7 @@ Validation:
 Status update:
 - Phase 14G follow-up: interactive summary rendering DONE
 Notes:
-- `view --mode summary` now renders a per-device table with status, last seen, latency, loss, and alert counts.
+- `view --mode summary` now renders a per-device table with status, last seen, latency, loss, metric counts for latest batch, and alert counts.
 - On interactive terminals, summary updates redraw in place instead of printing a new summary block every batch.
 - Live summary still updates from aggregated telemetry state, so newly discovered devices and up/down changes appear automatically.
 

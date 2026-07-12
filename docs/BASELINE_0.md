@@ -1,17 +1,24 @@
 # Phase 0 — Baseline & Safety Net
 
 > Dokumentasi keadaan sekarang sebagai acuan sebelum perubahan production.
+>
+> Historical baseline snapshot only.
+> Tidak dijamin cocok dengan layout package, versi Go, jumlah package, atau
+> angka coverage saat ini. Untuk perilaku operasional saat ini, ikuti
+> `README.md`, `docs/CLI_COMMANDS.md`, `docs/CONFIG_SCHEMA.md`, dan code.
 
-## Environment
+## Snapshot Environment
 
 | Item | Value |
 |------|-------|
-| Go version | 1.26.0 |
+| Go version | 1.26.0 (snapshot) |
 | OS | Windows (dev), Linux (deploy) |
 | SQLite | `modernc.org/sqlite` (pure Go, CGO_ENABLED=0) |
 | Build | `go build ./...` OK |
 
-## Test Baseline (22 paket)
+## Test Baseline Snapshot (22 paket)
+
+Angka di bawah adalah snapshot baseline, bukan metrik live yang dijaga terus.
 
 | Package | Status | Coverage |
 |---------|--------|----------|
@@ -48,12 +55,15 @@
 - Race test wajib dijalankan di Linux (CI) sebelum deploy.
 - Platform Windows hanya untuk development.
 
-## Code Stats
+Tabel package di atas bisa memuat nama package yang berubah pada fase berikutnya.
+Perlakukan sebagai bukti historis, bukan inventaris current-state.
+
+## Code Stats Snapshot
 
 | Metric | Value |
 |--------|-------|
-| Go files | 115 |
-| Total bytes | ~420 KB |
+| Go files | 115 (snapshot) |
+| Total bytes | ~420 KB (snapshot) |
 
 ## Invariants (Tidak Boleh Dilanggar)
 

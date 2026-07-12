@@ -3,6 +3,9 @@
 > Dokumen ini berisi rencana bertahap untuk membawa nms-agent dari kondisi
 > "berjalan sesuai kebutuhan" ke tingkat **production-stable** tanpa merusak
 > flow inti `collect → preprocess → normalize → queue → adapter send`.
+>
+> Roadmap only. Isi file ini adalah target hardening dan rollout, bukan jaminan
+> bahwa semua item sudah enforced oleh implementasi saat ini.
 
 ---
 
@@ -386,6 +389,9 @@ aktual.
 **Tujuan:** Mengurangi risiko kebocoran credential dan akses ilegal.
 
 ### Scope
+
+Item di section ini adalah target-state recommendation kecuali dokumen
+operasional current-state menyebutkan bahwa perilaku tersebut sudah diterapkan.
 
 | Area | Tindakan |
 |------|----------|
