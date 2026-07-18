@@ -12,5 +12,6 @@ paths:
   devices_dir: devices.d
   thresholds_file: thresholds.yml
   adapters_file: adapters.yml
-  queue_db: /var/lib/nms-agent/queue.db
-  profiles_dir: profiles
+  nms_agent_db: ../data/nms-agent.db
+  profiles_dir: ../profiles
+  view_socket: ../data/view.sock

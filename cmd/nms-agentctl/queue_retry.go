@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"nms-agent/internal/adapters"
 	"nms-agent/internal/config"
@@ -43,7 +44,13 @@ func runQueueRetry(args []string) int {
 		return 1
 	}
 
-	q, err := queue.OpenSQLite(cfg.Root.Paths.QueueDB)
+	absCfg, err := filepath.Abs(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	dbPath := config.ResolvePath(filepath.Dir(absCfg), cfg.Root.Paths.NMSAgentDB)
+	q, err := queue.OpenSQLite(dbPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1

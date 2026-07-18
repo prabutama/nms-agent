@@ -16,6 +16,7 @@ import (
 	"nms-agent/internal/collectors"
 	"nms-agent/internal/config"
 	"nms-agent/internal/profiles"
+	"nms-agent/internal/queue"
 
 	yaml "gopkg.in/yaml.v3"
 )
@@ -138,6 +139,7 @@ func runDeviceList(args []string) int {
 
 	devs := append([]config.Device(nil), loaded.Devices...)
 	sort.Slice(devs, func(i, j int) bool { return devs[i].ID < devs[j].ID })
+	tokens := loadMaskedThingsBoardTokens(context.Background(), *configPath, loaded)
 
 	fmt.Fprintf(os.Stdout, "devices=%d\n", len(devs))
 	if len(devs) == 0 {
@@ -145,18 +147,60 @@ func runDeviceList(args []string) int {
 	}
 
 	// Stable, greppable tabular output.
-	fmt.Fprintln(os.Stdout, "id\taddress\tvendor\tmodel\tsnmp\ticmp")
+	fmt.Fprintln(os.Stdout, "id\taddress\tvendor\tmodel\tsnmp\ticmp\ttb_token")
 	for _, d := range devs {
-		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%t\t%t\n",
+		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%t\t%t\t%s\n",
 			d.ID,
 			d.Address,
 			d.Vendor,
 			d.Model,
 			d.SNMP.Enabled,
 			d.ICMP.Enabled,
+			tokens[d.ID],
 		)
 	}
 	return 0
+}
+
+func loadMaskedThingsBoardTokens(ctx context.Context, configPath string, loaded config.Loaded) map[string]string {
+	out := make(map[string]string, len(loaded.Devices))
+	for _, d := range loaded.Devices {
+		out[d.ID] = "-"
+	}
+	absCfg, err := filepath.Abs(configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "warning: could not resolve token store path: "+err.Error())
+		return out
+	}
+	dbPath := config.ResolvePath(filepath.Dir(absCfg), loaded.Root.Paths.NMSAgentDB)
+	q, err := queue.OpenSQLite(dbPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "warning: could not read token store: "+err.Error())
+		return out
+	}
+	defer q.Close()
+	for _, d := range loaded.Devices {
+		token, ok, err := q.GetThingsBoardToken(ctx, d.ID)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "warning: could not read token for device "+d.ID+": "+err.Error())
+			continue
+		}
+		if ok {
+			out[d.ID] = maskToken(token)
+		}
+	}
+	return out
+}
+
+func maskToken(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "-"
+	}
+	if len(token) <= 8 {
+		return "****"
+	}
+	return token[:4] + "..." + token[len(token)-4:]
 }
 
 func runDeviceAdd(args []string) int {

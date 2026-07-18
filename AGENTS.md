@@ -21,7 +21,7 @@ Windows: use `make.bat` instead. No CGO (uses `modernc.org/sqlite`).
 
 - Use `README.md`, `docs/CLI_COMMANDS.md`, and code as current operational source of truth.
 - `nms-agentctl queue retry` is currently limited. For empty or `tui` active adapter it uses no-op delivery; real adapter redelivery is not implemented for other adapters yet.
-- `nms-agentctl view` depends on local socket `/run/nms-agent/view.sock` and is mainly intended for Linux/systemd-style runtime environments.
+- `nms-agentctl view` uses `paths.view_socket` when configured; otherwise it defaults to `/run/nms-agent/view.sock` for Linux/systemd-style runtime environments.
 - Do not assume every `nms-agentctl` subcommand uses same default config path. Prefer `--config <path>` explicitly.
 
 ## Production Features (added in production readiness phase)

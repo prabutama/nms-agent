@@ -1,9 +1,0 @@
-# HQ — Distribution Switch
-id: hq-dist-switch-1
-address: 10.0.0.2
-vendor: cisco
-model: catalyst
-icmp:
-  enabled: true
-snmp:
-  enabled: true

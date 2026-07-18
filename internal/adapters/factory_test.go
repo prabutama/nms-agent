@@ -22,7 +22,7 @@ func TestNewAdapter_SupportedNames(t *testing.T) {
 	}
 
 	// thingsboard mqtt
-	ad, err = NewAdapter("thingsboard_mqtt", map[string]any{"broker": "tcp://127.0.0.1:1883", "access_token": "token"})
+	ad, err = NewAdapter("thingsboard_mqtt", map[string]any{"broker": "tcp://127.0.0.1:1883", "provisioning": map[string]any{"base_url": "http://tb:8080", "device_key": "key", "device_secret": "secret"}})
 	if err != nil {
 		t.Fatalf("thingsboard_mqtt: %v", err)
 	}

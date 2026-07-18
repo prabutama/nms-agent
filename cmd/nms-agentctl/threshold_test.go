@@ -31,7 +31,7 @@ func writeAgentFiles(t *testing.T, dir, queueDB, thresholdsContent string) strin
 	}
 
 	agentYml := filepath.Join(dir, "agent.yml")
-	agentContent := "agent:\n  poll_interval: 1s\npaths:\n  devices_dir: devices.d\n  thresholds_file: thresholds.yml\n  adapters_file: adapters.yml\n  queue_db: " + filepath.ToSlash(queueDB) + "\n"
+	agentContent := "agent:\n  poll_interval: 1s\npaths:\n  devices_dir: devices.d\n  thresholds_file: thresholds.yml\n  adapters_file: adapters.yml\n  nms_agent_db: " + filepath.ToSlash(queueDB) + "\n"
 	if err := os.WriteFile(agentYml, []byte(agentContent), 0o644); err != nil {
 		t.Fatalf("WriteFile agent.yml: %v", err)
 	}

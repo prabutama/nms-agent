@@ -32,7 +32,8 @@ paths:
   devices_dir: devices.d
   thresholds_file: thresholds.yml
   adapters_file: adapters.yml
-  queue_db: data/queue/queue.db
+  nms_agent_db: data/nms-agent.db
+  view_socket: data/view.sock
 ```
 
 Notes:
@@ -46,7 +47,8 @@ Notes:
   - `stop_on_error`: when true, abort on first send failure; otherwise continue draining.
 - `paths.*` may be relative to the directory containing `agent.yml`.
 - `${ENV_VAR}` expansion is supported for path strings via the current process environment.
-- `paths.queue_db` is the SQLite DB file path for the local durable queue. Its parent directory is created at runtime if missing.
+- `paths.nms_agent_db` is the SQLite DB file path for local agent state. It stores queue items and generated ThingsBoard device tokens. Its parent directory is created at runtime if missing.
+- `paths.view_socket` is the Unix socket path used by `nms-agentctl view`. If empty, it defaults to `/run/nms-agent/view.sock`. Use a relative path like `data/view.sock` for WSL/dev runs without systemd permissions.
 - Discovery is manual-only. `agent.yml` does not require or store discovery configuration for daemon runtime.
 - Discovery is executed only through `nms-agentctl discovery preview --subnet <CIDR>` and `nms-agentctl discovery run --subnet <CIDR>`.
 - Running preview/run is explicit consent; manual discovery does not depend on `discovery.enabled`.
@@ -147,17 +149,13 @@ adapters:
     strict_queue_mode: true
 ```
 
-- `thingsboard_mqtt`: publish ThingsBoard-shaped telemetry either directly to ThingsBoard Gateway MQTT API or indirectly via broker for ThingsBoard Gateway connector ingestion.
+- `thingsboard_mqtt`: auto-provision ThingsBoard device tokens, cache them in SQLite, then publish telemetry through the ThingsBoard MQTT Device API.
   Required configs:
   - `broker`: broker URL (e.g. `tcp://thingsboard.local:1883`).
+  - `provisioning.base_url`: ThingsBoard HTTP base URL for `POST /api/v1/provision`.
+  - `provisioning.device_key`: provisioning key from the target ThingsBoard device profile.
+  - `provisioning.device_secret`: provisioning secret from the target ThingsBoard device profile.
   Optional configs:
-  - `mode`: `direct` or `gateway` (default `direct`).
-    - `direct`: MQTT auth uses ThingsBoard gateway `access_token`, default topic `v1/gateway/telemetry`.
-    - `gateway`: publish to a regular broker/topic for ThingsBoard Gateway connector consumption, default topic `nms-agent/thingsboard/telemetry`.
-  - `access_token`: ThingsBoard gateway device access token (required in `direct` mode).
-  - `username`: broker username for `gateway` mode if broker auth is enabled.
-  - `password`: broker password for `gateway` mode if broker auth is enabled.
-  - `topic`: telemetry topic (default `v1/gateway/telemetry`).
   - `client_id`: MQTT client ID.
   - `qos`: `0|1|2` (default `1`).
   - `retain`: (default `false`).
@@ -171,9 +169,10 @@ adapters:
   - `thingsboard.site.asset_id`: target asset site untuk relation dan topology attributes.
   - `thingsboard.site.asset_name`: optional nama asset untuk audit/debug.
   Notes:
-  - Adapter publishes payload grouped by device and timestamp in ThingsBoard-style `{"device":[{"ts":...,"values":{...}}]}` format.
+  - Adapter publishes per-device timestamped payloads to fixed topic `v1/devices/me/telemetry`.
+  - Adapter publishes per-device attributes to fixed topic `v1/devices/me/attributes`.
+  - Device tokens are stored in `thingsboard_device_tokens` inside `paths.nms_agent_db`.
   - Adapter will publish metric value plus metadata keys: `<metric>__value_type` and `<metric>__tags` (includes threshold tags like `threshold.status`).
-  - In `gateway` mode this payload is intended to be consumed by a ThingsBoard Gateway MQTT connector with a thin/pass-through custom converter.
   - Jalur hybrid management memakai REST API tenant-scope untuk relation `ASSET(site) --Contains--> DEVICE`, publish topology snapshot ke `SERVER_SCOPE` attribute asset site, serta alarm create/clear/assign. Gagal pada jalur management tidak boleh mematikan telemetry utama.
 
 Example:
@@ -183,20 +182,11 @@ adapters:
   active: thingsboard_mqtt
   configs:
     broker: tcp://127.0.0.1:1883
-    access_token: YOUR_GATEWAY_TOKEN
     strict_queue_mode: true
-```
-
-Gateway mode example:
-
-```yaml
-adapters:
-  active: thingsboard_mqtt
-  configs:
-    broker: tcp://127.0.0.1:1883
-    mode: gateway
-    topic: nms-agent/thingsboard/telemetry
-    strict_queue_mode: true
+    provisioning:
+      base_url: ${TB_URL}
+      device_key: ${TB_PROVISION_DEVICE_KEY}
+      device_secret: ${TB_PROVISION_DEVICE_SECRET}
     thingsboard:
       api:
         base_url: ${TB_URL}

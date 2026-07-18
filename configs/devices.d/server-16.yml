@@ -1,9 +1,9 @@
-id: proxmox-ta
-address: 10.10.10.150
+id: server-16
+address: 172.16.0.16
 
 # Device metadata (future use for profiles/collectors).
 vendor: linux
-model: proxmox
+model: ""
 
 # Enable real collectors (Phase 5 runtime selection).
 icmp:

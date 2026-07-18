@@ -13,11 +13,14 @@
 
 adapters:
   active: thingsboard_mqtt
-  configs:
-    broker: tcp://127.0.0.1:1883
-    mode: gateway
-    topic: nms-agent/thingsboard/telemetry
+  configs:  
+    broker: tcp://100.127.212.84:1883
     strict_queue_mode: true
+
+    provisioning:
+      base_url: ${TB_URL}
+      device_key: ${TB_PROVISION_DEVICE_KEY}
+      device_secret: ${TB_PROVISION_DEVICE_SECRET}
 
     thingsboard:
       api:

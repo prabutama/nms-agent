@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ func runView(args []string) int {
 	fs.SetOutput(os.Stderr)
 	configPath := fs.String("config", "/etc/nms-agent/agent.yml", "Path to agent.yml")
 	mode := fs.String("mode", "summary", "View mode: summary or raw")
+	socketOverride := fs.String("socket", "", "Override daemon view socket path")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -39,7 +41,19 @@ func runView(args []string) int {
 		return 1
 	}
 
-	socketPath := "/run/nms-agent/view.sock"
+	absCfg, err := filepath.Abs(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	socketPath := strings.TrimSpace(*socketOverride)
+	if socketPath == "" {
+		socketPath = strings.TrimSpace(loaded.Root.Paths.ViewSocket)
+	}
+	if socketPath == "" {
+		socketPath = "/run/nms-agent/view.sock"
+	}
+	socketPath = config.ResolvePath(filepath.Dir(absCfg), socketPath)
 	cli, err := viewer.Dial(socketPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "connect to daemon: %v\n", err)

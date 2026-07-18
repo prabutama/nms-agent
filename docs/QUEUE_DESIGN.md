@@ -1,6 +1,6 @@
 # Queue Design (Phase 4)
 
-This document defines the local store-and-forward queue.
+This document defines the local store-and-forward queue stored inside the agent SQLite database.
 
 ## Goals
 
@@ -27,6 +27,8 @@ Table: `queue_items`
 Index:
 - `(status, created_at)` for efficient oldest-first pending reads.
 
+The same database also stores adapter runtime state. ThingsBoard device tokens are stored in `thingsboard_device_tokens`.
+
 ## API Behavior (Phase 4A)
 
 - Enqueue: insert one row per telemetry record.
@@ -45,6 +47,6 @@ If the adapter is unavailable, items remain `pending` in SQLite and will be retr
 
 ## Runtime Wiring
 
-- The SQLite DB path is configured via `paths.queue_db` in `configs/agent.yml`.
-- At startup, the agent creates the parent directory of `queue_db` if it does not exist.
+- The SQLite DB path is configured via `paths.nms_agent_db` in `configs/agent.yml`.
+- At startup, the agent creates the parent directory of `nms_agent_db` if it does not exist.
 - If directory creation fails, startup fails fast with a clear error.

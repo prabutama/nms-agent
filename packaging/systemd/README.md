@@ -46,9 +46,9 @@ journalctl -u nms-agent -f
 - `/etc/nms-agent/devices.d/*.yml`
 - `/etc/nms-agent/nms-agent.env`
 
-Queue data is stored under:
+Agent state is stored under:
 
-- `/var/lib/nms-agent/queue.db`
+- `/var/lib/nms-agent/nms-agent.db`
 
 ## Reload Behavior
 

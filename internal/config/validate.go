@@ -60,8 +60,8 @@ func Validate(cfg Loaded) error {
 	if strings.TrimSpace(cfg.Root.Paths.AdaptersFile) == "" {
 		errs = append(errs, "paths.adapters_file is required")
 	}
-	if strings.TrimSpace(cfg.Root.Paths.QueueDB) == "" {
-		errs = append(errs, "paths.queue_db is required")
+	if strings.TrimSpace(cfg.Root.Paths.NMSAgentDB) == "" {
+		errs = append(errs, "paths.nms_agent_db is required")
 	}
 
 	// Devices.

@@ -95,7 +95,8 @@ paths:
   thresholds_file: thresholds.yml
   profiles_dir: profiles
   adapters_file: adapters.yml
-  queue_db: data/queue/queue.db
+  nms_agent_db: data/nms-agent.db
+  view_socket: data/view.sock
 ```
 
 ### devices.d/<id>.yml
@@ -115,13 +116,16 @@ snmp:
 
 ```yaml
 adapters:
-  active: generic_mqtt
+  active: thingsboard_mqtt
   configs:
-    broker: tcp://127.0.0.1:1883
-    topic: nms-agent/telemetry
+    broker: tcp://thingsboard.local:1883
     qos: 1
     retain: false
     strict_queue_mode: true
+    provisioning:
+      base_url: http://thingsboard.local:8080
+      device_key: ${TB_PROVISION_DEVICE_KEY}
+      device_secret: ${TB_PROVISION_DEVICE_SECRET}
 ```
 
 ### thresholds.yml
@@ -181,7 +185,7 @@ Notes:
 
 - Always pass `--config` explicitly. Current subcommands do not all use same built-in default path.
 - `nms-agentctl queue retry` is currently limited. For empty or `tui` active adapter it uses no-op delivery; real adapter redelivery is not implemented for other adapters yet.
-- `nms-agentctl view` depends on local daemon socket `/run/nms-agent/view.sock` and is intended for Linux/systemd-style runtime environments.
+- `nms-agentctl view` uses `paths.view_socket` when set; production defaults to `/run/nms-agent/view.sock`, while WSL/dev configs can use `data/view.sock`.
 
 ## Architecture
 
@@ -228,14 +232,14 @@ See [docs/SECURITY.md](docs/SECURITY.md) for security guidelines.
 ## Known Limitations
 
 - `nms-agentctl queue retry` does not yet perform real redelivery for non-`tui` adapters. Treat it as limited diagnostic/development helper, not full production replay mechanism.
-- `nms-agentctl view` requires running daemon that exposes `/run/nms-agent/view.sock`. This feature is Linux/Unix-oriented and is not portable native Windows runtime feature.
+- `nms-agentctl view` requires a running daemon with viewer socket available. Use `paths.view_socket` for WSL/dev paths or default `/run/nms-agent/view.sock` for production Linux/systemd.
 - Default `--config` behavior is not yet uniform across all `nms-agentctl` subcommands. Use `--config <path>` on every command to avoid ambiguity.
 
 ## Platform Notes
 
 - Linux with systemd is primary production target.
 - Windows and WSL are acceptable for development, configuration work, and most tests.
-- Local viewer socket features such as `nms-agentctl view` are designed around Unix-style runtime paths and service management.
+- Local viewer socket features such as `nms-agentctl view` require Unix sockets; configure `paths.view_socket` for WSL/dev runs.
 
 ## License
 

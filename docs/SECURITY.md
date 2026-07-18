@@ -6,8 +6,8 @@ Security guidelines for deploying and operating the NMS Agent.
 
 ### MQTT Access Tokens
 
-- Store ThingsBoard access tokens securely in `adapters.yml`
-- Never commit `adapters.yml` with real tokens to version control
+- ThingsBoard device tokens are cached in SQLite table `thingsboard_device_tokens`; protect `nms-agent.db` as a secret-bearing file.
+- `nms-agentctl device list` only prints masked token values.
 - Use environment variables for sensitive values where possible
 - Rotate tokens regularly through the ThingsBoard dashboard
 
@@ -31,7 +31,7 @@ chmod 600 /etc/nms-agent/devices.d/*.yml
 - Queue database contains telemetry data:
 
 ```bash
-chmod 600 /var/lib/nms-agent/queue.db
+chmod 600 /var/lib/nms-agent/nms-agent.db
 ```
 
 - Agent user should have minimal required permissions:
@@ -76,7 +76,7 @@ The agent does not listen for inbound connections. No additional firewall rules 
 - Queue data may contain network topology information
 - Ensure queue storage volume is encrypted at rest where required
 - Implement queue data retention policies if needed
-- The agent writes a runtime status file (`status.json`) alongside the queue DB — it contains cycle state and queue metrics; protect it with the same permissions as `queue.db`
+- The agent writes a runtime status file (`status.json`) alongside `nms-agent.db` — it contains cycle state and queue metrics; protect it with the same permissions as `nms-agent.db`
 
 ## Binary Distribution
 

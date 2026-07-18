@@ -116,7 +116,7 @@ Langkah:
    - Total failures.
    - Memory max, min, avg.
    - CPU max, min, avg.
-   - Disk usage queue.db.
+   - Disk usage nms-agent.db.
 
 Kriteria lulus:
 - Agent tidak restart/crash selama 24 jam.

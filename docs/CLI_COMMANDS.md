@@ -22,6 +22,8 @@ nms-agentctl reload --config configs/agent.yml --pid <pid>
 ## Device Commands
 nms-agentctl device list --config configs/agent.yml
 
+`device list` prints loaded device inventory and a masked `tb_token` column. Token values come from `thingsboard_device_tokens` in `paths.nms_agent_db`; if the DB cannot be read or no token exists, the column shows `-`.
+
 ### Add a device
 nms-agentctl device add --config configs/agent.yml \
   --id router-2 \
@@ -98,9 +100,13 @@ Summary mode shows:
 ### View raw live telemetry stream
 nms-agentctl view --config /etc/nms-agent/agent.yml --mode raw
 
+### Override daemon socket path
+nms-agentctl view --config configs/agent.yml --socket data/view.sock --mode summary
+
 Notes:
 
-- `view` connects to local daemon socket `/run/nms-agent/view.sock`.
+- `view` connects to `paths.view_socket` from config when set, or `/run/nms-agent/view.sock` by default.
+- `--socket <path>` overrides config for ad-hoc/dev runs.
 - `view` requires running `nms-agent` daemon with viewer socket available.
 - This command is intended for Linux/Unix-style runtime environments.
 

@@ -136,7 +136,7 @@ func TestServiceRunOnce_PromotesKnownProfile(t *testing.T) {
 	loaded := config.Loaded{
 		Root: config.Root{
 			Agent: config.Agent{PollInterval: time.Second},
-			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", QueueDB: "queue.db"},
+			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", NMSAgentDB: "nms-agent.db"},
 			Discovery: config.Discovery{
 				Enabled:     true,
 				Interface:   "eth0",
@@ -178,7 +178,7 @@ func TestServiceRunOnce_AppendsCollisionSuffix(t *testing.T) {
 	loaded := config.Loaded{
 		Root: config.Root{
 			Agent: config.Agent{PollInterval: time.Second},
-			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", QueueDB: "queue.db"},
+			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", NMSAgentDB: "nms-agent.db"},
 			Discovery: config.Discovery{
 				Enabled:     true,
 				Interface:   "eth0",
@@ -221,7 +221,7 @@ func TestServiceRunOnce_RespectsPromotionLimit(t *testing.T) {
 	loaded := config.Loaded{
 		Root: config.Root{
 			Agent: config.Agent{PollInterval: time.Second},
-			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", QueueDB: "queue.db"},
+			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", NMSAgentDB: "nms-agent.db"},
 			Discovery: config.Discovery{
 				Enabled:     true,
 				Interface:   "eth0",
@@ -259,7 +259,7 @@ func TestServiceRunOnce_DoesNotTreatStandardAsProfileMatch(t *testing.T) {
 	loaded := config.Loaded{
 		Root: config.Root{
 			Agent: config.Agent{PollInterval: time.Second},
-			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", QueueDB: "queue.db"},
+			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", NMSAgentDB: "nms-agent.db"},
 			Discovery: config.Discovery{
 				Enabled:     true,
 				Interface:   "eth0",
@@ -296,7 +296,7 @@ func TestServiceRunOnce_ExplorationGeneratesProfileAndPromotes(t *testing.T) {
 	loaded := config.Loaded{
 		Root: config.Root{
 			Agent: config.Agent{PollInterval: time.Second},
-			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", QueueDB: "queue.db"},
+			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", NMSAgentDB: "nms-agent.db"},
 			Discovery: config.Discovery{
 				Enabled:     true,
 				Interface:   "eth0",
@@ -353,7 +353,7 @@ func discoveryTestLoaded(profilesDir string, maxNewDevices int) config.Loaded {
 	return config.Loaded{
 		Root: config.Root{
 			Agent: config.Agent{PollInterval: time.Second},
-			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", QueueDB: "queue.db"},
+			Paths: config.Paths{DevicesDir: "devices.d", ThresholdsFile: "thresholds.yml", AdaptersFile: "adapters.yml", NMSAgentDB: "nms-agent.db"},
 			Discovery: config.Discovery{
 				Interface: "eth0",
 				Subnet:    "192.168.10.0/24",

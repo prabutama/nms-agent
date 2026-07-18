@@ -48,7 +48,7 @@
 | 3.6 | `sudo systemctl status nms-agent` (after reload) | `active (running)` | | |
 | 3.7 | `sudo systemctl restart nms-agent` | tidak ada error | | |
 | 3.8 | `sudo systemctl status nms-agent` (after restart) | `active (running)` | | |
-| 3.9 | `ls -la /var/lib/nms-agent/queue.db` | file exists, owner nms-agent | | |
+| 3.9 | `ls -la /var/lib/nms-agent/nms-agent.db` | file exists, owner nms-agent | | |
 | 3.10 | `ls -la /var/lib/nms-agent/status.json` | file exists, owner nms-agent | | |
 | 3.11 | `journalctl -u nms-agent -n 50 --no-pager` | log terstruktur, tidak ada error berulang | | |
 
@@ -114,7 +114,7 @@
 | 7.4 | 24 jam | Dead-letter count | 0 | |
 | 7.5 | 24 jam | Log error rate | Tidak ada error berulang | |
 | 7.6 | 24 jam | Restart count (systemctl) | 0 restart tak terduga | |
-| 7.7 | 24 jam | Disk growth queue.db | Terkendali | |
+| 7.7 | 24 jam | Disk growth nms-agent.db | Terkendali | |
 
 **Gate 7 PASS jika:** 24 jam tanpa crash/restart/growth tak terbatas.
 
@@ -140,7 +140,7 @@
 | # | Perintah | Expected | Actual | Status |
 |---|----------|----------|--------|--------|
 | 9.1 | `stat -c '%U:%G' /etc/nms-agent/*.yml` (Linux) | `nms-agent:nms-agent` | | |
-| 9.2 | `stat -c '%a' /var/lib/nms-agent/queue.db` (Linux) | `600` | | |
+| 9.2 | `stat -c '%a' /var/lib/nms-agent/nms-agent.db` (Linux) | `600` | | |
 | 9.3 | `ps aux | grep nms-agent` (Linux) | user `nms-agent` | | |
 | 9.4 | Cek `agent.yml`: `logging.format` | json untuk prod | | |
 | 9.5 | Cek broker URL | pakai TLS (mqtts:// atau wss://) | | |

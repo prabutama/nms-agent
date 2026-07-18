@@ -17,4 +17,5 @@ paths:
   thresholds_file: /etc/nms-agent/thresholds.yml
   adapters_file: /etc/nms-agent/adapters.yml
   profiles_dir: /etc/nms-agent/profiles
-  queue_db: /var/lib/nms-agent/queue.db
+  nms_agent_db: /var/lib/nms-agent/nms-agent.db
+  view_socket: /run/nms-agent/view.sock

@@ -75,7 +75,7 @@ nms-agentctl device test --config configs/agent.yml --id <device-id> --snmp=true
 
 ### Queue DB path permission denied
 
-**Error:** `open data/queue/queue.db: permission denied`
+**Error:** `open data/nms-agent.db: permission denied`
 
 **Fix:** Ensure the queue directory is writable by the agent process.
 
@@ -84,7 +84,7 @@ mkdir -p data/queue
 chmod 755 data/queue
 ```
 
-For systemd deployment, queue is stored at `/var/lib/nms-agent/queue.db`.
+For systemd deployment, agent state is stored at `/var/lib/nms-agent/nms-agent.db`.
 
 ### Queue full or disk space
 

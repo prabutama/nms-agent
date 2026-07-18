@@ -7,18 +7,7 @@ import (
 	"nms-agent/internal/models"
 )
 
-func TestThingsBoardMQTTAdapter_DirectModeProjectsRouteStringsToAttributes(t *testing.T) {
-	c, err := parseConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "mode": "direct", "access_token": "token"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if c.Mode != "direct" {
-		t.Fatalf("expected mode=direct, got %q", c.Mode)
-	}
-	if c.Topic != "v1/gateway/telemetry" {
-		t.Fatalf("expected topic v1/gateway/telemetry, got %q", c.Topic)
-	}
-
+func TestThingsBoardMQTTAdapter_ProjectsRouteStringsToAttributes(t *testing.T) {
 	snap := `{"device_id":"r1","ipv4_default":[{"destination":"0.0.0.0/0","next_hop":"10.0.0.1","interface_id":"2","protocol":"kernel","route_type":"local"}],"ipv4_connected":[{"destination":"10.0.0.0/24","next_hop":"0.0.0.0","interface_id":"2","protocol":"kernel","route_type":"local"}],"ipv4_remote":[{"destination":"192.168.1.0/24","next_hop":"10.0.0.2","interface_id":"2","protocol":"ospf","route_type":"remote"}]}`
 	ts := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	batch := []models.Telemetry{
@@ -26,7 +15,7 @@ func TestThingsBoardMQTTAdapter_DirectModeProjectsRouteStringsToAttributes(t *te
 		{DeviceID: "r1", Metric: "route.ipv4.snapshot", ValueType: "string", ValueString: strPtr(snap), TS: ts},
 	}
 
-	telemetryPayload, attrPayload, err := buildPayloads("direct", batch)
+	telemetryPayload, attrPayload, err := buildPayloads(batch)
 	if err != nil {
 		t.Fatalf("buildPayloads: %v", err)
 	}
@@ -39,7 +28,7 @@ func TestThingsBoardMQTTAdapter_DirectModeProjectsRouteStringsToAttributes(t *te
 			t.Fatalf("expected test metric in telemetry")
 		}
 		if _, hasSnap := val[0].Values["route.ipv4.snapshot"]; hasSnap {
-			t.Fatalf("route snapshot should NOT be in telemetry values in direct mode")
+			t.Fatalf("route snapshot should NOT be in telemetry values")
 		}
 	} else {
 		t.Fatalf("expected device r1 in telemetry payload")
@@ -59,35 +48,6 @@ func TestThingsBoardMQTTAdapter_DirectModeProjectsRouteStringsToAttributes(t *te
 	}
 	if attrSnap.(string) != snap {
 		t.Fatalf("snapshot content mismatch")
-	}
-}
-
-func TestThingsBoardMQTTAdapter_GatewayModeKeepsAllInTelemetry(t *testing.T) {
-	c, err := parseConfig(map[string]any{"broker": "tcp://127.0.0.1:1883", "mode": "gateway"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if c.Mode != "gateway" {
-		t.Fatalf("expected mode=gateway")
-	}
-	if c.Topic != "nms-agent/thingsboard/telemetry" {
-		t.Fatalf("expected topic nms-agent/thingsboard/telemetry, got %q", c.Topic)
-	}
-
-	snap := `{"device_id":"r1","ipv4_default":[],"ipv4_connected":[],"ipv4_remote":[]}`
-	batch := []models.Telemetry{
-		{DeviceID: "r1", Metric: "route.ipv4.snapshot", ValueType: "string", ValueString: strPtr(snap), TS: time.Now().UTC()},
-	}
-
-	telemetryPayload, attrPayload, err := buildPayloads("gateway", batch)
-	if err != nil {
-		t.Fatalf("buildPayloads: %v", err)
-	}
-	if attrPayload != nil && len(attrPayload) > 0 {
-		t.Fatalf("expected no attributes payload in gateway mode")
-	}
-	if _, ok := telemetryPayload["r1"]; !ok {
-		t.Fatalf("expected device r1 in telemetry payload in gateway mode")
 	}
 }
 
@@ -157,7 +117,7 @@ func TestTBFlattenedStorageKey(t *testing.T) {
 
 func TestTBBuildThingsBoardPayloads_ValidationErrors(t *testing.T) {
 	t.Run("empty device id", func(t *testing.T) {
-		_, _, err := buildPayloads("direct", []models.Telemetry{
+		_, _, err := buildPayloads([]models.Telemetry{
 			{DeviceID: "", Metric: "m", TS: time.Now().UTC()},
 		})
 		if err == nil {
@@ -165,7 +125,7 @@ func TestTBBuildThingsBoardPayloads_ValidationErrors(t *testing.T) {
 		}
 	})
 	t.Run("empty metric", func(t *testing.T) {
-		_, _, err := buildPayloads("direct", []models.Telemetry{
+		_, _, err := buildPayloads([]models.Telemetry{
 			{DeviceID: "d1", Metric: "", TS: time.Now().UTC()},
 		})
 		if err == nil {
@@ -182,7 +142,7 @@ func TestTBBuildThingsBoardPayloads_GroupsByTimestamp(t *testing.T) {
 		{DeviceID: "d1", Metric: "m2", ValueType: "number", ValueNumber: floatPtr(2), TS: ts1},
 		{DeviceID: "d1", Metric: "m3", ValueType: "number", ValueNumber: floatPtr(3), TS: ts2},
 	}
-	payload, _, err := buildPayloads("direct", batch)
+	payload, _, err := buildPayloads(batch)
 	if err != nil {
 		t.Fatalf("buildPayloads: %v", err)
 	}

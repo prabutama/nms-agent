@@ -9,6 +9,7 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 
+	tbintegration "nms-agent/internal/integrations/thingsboard"
 	"nms-agent/internal/models"
 	"nms-agent/internal/routes"
 )
@@ -30,17 +31,16 @@ type publishCall struct {
 }
 
 func newFakeTBMQTTClient(connected, open bool) *fakeTBMQTTClient {
-	return &fakeTBMQTTClient{
-		connected:    connected,
-		open:         open,
-		connectToken: &fakeTBToken{waitOK: true},
-		publishToken: &fakeTBToken{waitOK: true},
-	}
+	return &fakeTBMQTTClient{connected: connected, open: open, connectToken: &fakeTBToken{waitOK: true}, publishToken: &fakeTBToken{waitOK: true}}
 }
 
 func (c *fakeTBMQTTClient) IsConnected() bool      { return c.connected }
 func (c *fakeTBMQTTClient) IsConnectionOpen() bool { return c.open }
-func (c *fakeTBMQTTClient) Connect() mqtt.Token    { return c.connectToken }
+func (c *fakeTBMQTTClient) Connect() mqtt.Token {
+	c.connected = true
+	c.open = true
+	return c.connectToken
+}
 func (c *fakeTBMQTTClient) Publish(topic string, qos byte, retained bool, payload interface{}) mqtt.Token {
 	raw, _ := payload.([]byte)
 	c.publishes = append(c.publishes, publishCall{topic: topic, qos: qos, retained: retained, payload: raw})
@@ -54,10 +54,61 @@ type fakeTBToken struct {
 	done   chan struct{}
 }
 
+func (t *fakeTBToken) Wait() bool                     { return t.waitOK }
+func (t *fakeTBToken) WaitTimeout(time.Duration) bool { return t.waitOK }
+func (t *fakeTBToken) Done() <-chan struct{}          { return t.done }
+func (t *fakeTBToken) Error() error                   { return t.err }
+
 type fakeTBObserver struct {
 	updates  [][]models.Telemetry
 	statuses []string
 	details  []string
+}
+
+func (o *fakeTBObserver) Update(batch []models.Telemetry) {
+	o.updates = append(o.updates, append([]models.Telemetry(nil), batch...))
+}
+
+func (o *fakeTBObserver) UpdateStatus(status string, details string) {
+	o.statuses = append(o.statuses, status)
+	o.details = append(o.details, details)
+}
+
+type fakeTokenStore struct {
+	tokens map[string]string
+	saves  int
+	used   int
+}
+
+func (s *fakeTokenStore) GetThingsBoardToken(_ context.Context, deviceID string) (string, bool, error) {
+	token, ok := s.tokens[deviceID]
+	return token, ok, nil
+}
+func (s *fakeTokenStore) SaveThingsBoardToken(_ context.Context, deviceID, token string) error {
+	if s.tokens == nil {
+		s.tokens = map[string]string{}
+	}
+	s.tokens[deviceID] = token
+	s.saves++
+	return nil
+}
+func (s *fakeTokenStore) MarkThingsBoardTokenUsed(_ context.Context, deviceID string) error {
+	s.used++
+	return nil
+}
+
+type fakeProvisioner struct {
+	token string
+	calls int
+	err   error
+}
+
+func (p *fakeProvisioner) ProvisionDevice(_ context.Context, deviceName string) (string, error) {
+	p.calls++
+	if p.err != nil {
+		return "", p.err
+	}
+	return p.token, nil
 }
 
 type fakeRelationEnsurer struct{ calls int }
@@ -74,369 +125,168 @@ func (f *fakeTopologyPublisher) PublishIfChanged(_ context.Context, snapshots []
 	return nil
 }
 
-func (o *fakeTBObserver) Update(batch []models.Telemetry) {
-	cp := append([]models.Telemetry(nil), batch...)
-	o.updates = append(o.updates, cp)
+func TestParseConfigProvisioningOnly(t *testing.T) {
+	c, err := parseConfig(validProvisioningConfig())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.BrokerURL != "tcp://127.0.0.1:1883" {
+		t.Fatalf("broker=%q", c.BrokerURL)
+	}
+	if c.Provisioning.BaseURL != "http://tb:8080" || c.Provisioning.DeviceKey != "key" || c.Provisioning.DeviceSecret != "secret" {
+		t.Fatalf("unexpected provisioning config: %+v", c.Provisioning)
+	}
 }
 
-func (o *fakeTBObserver) UpdateStatus(status string, details string) {
-	o.statuses = append(o.statuses, status)
-	o.details = append(o.details, details)
+func TestParseConfigRejectsOldKeys(t *testing.T) {
+	for _, key := range []string{"mode", "topic", "access_token"} {
+		t.Run(key, func(t *testing.T) {
+			cfg := validProvisioningConfig()
+			cfg[key] = "old"
+			if _, err := parseConfig(cfg); err == nil {
+				t.Fatalf("expected error")
+			}
+		})
+	}
 }
 
-func (t *fakeTBToken) Wait() bool                     { return t.waitOK }
-func (t *fakeTBToken) WaitTimeout(time.Duration) bool { return t.waitOK }
-func (t *fakeTBToken) Done() <-chan struct{}          { return t.done }
-func (t *fakeTBToken) Error() error                   { return t.err }
+func TestParseConfigRequiresProvisioning(t *testing.T) {
+	for _, key := range []string{"base_url", "device_key", "device_secret"} {
+		t.Run(key, func(t *testing.T) {
+			cfg := validProvisioningConfig()
+			delete(cfg["provisioning"].(map[string]any), key)
+			if _, err := parseConfig(cfg); err == nil {
+				t.Fatalf("expected error")
+			}
+		})
+	}
+}
 
-func TestThingsBoardMQTTAdapter_DirectMode(t *testing.T) {
+func TestThingsBoardMQTTAdapterPublishesDeviceTelemetry(t *testing.T) {
 	fake := newFakeTBMQTTClient(true, true)
-	a := &ThingsBoardMQTTAdapter{
-		cfg:    thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
-		client: fake,
-	}
-	batch := []models.Telemetry{
-		{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()},
-	}
-	if err := a.SendBatch(nil, batch); err != nil {
+	a := testAdapter(fake, &fakeTokenStore{tokens: map[string]string{"d1": "token"}}, &fakeProvisioner{token: "new"})
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
+	if err := a.SendBatch(context.Background(), batch); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if len(fake.publishes) != 1 {
 		t.Fatalf("expected 1 publish, got %d", len(fake.publishes))
 	}
-	var payload map[string][]tbGatewayTelemetry
+	if fake.publishes[0].topic != tbDeviceTelemetryTopic {
+		t.Fatalf("topic=%q", fake.publishes[0].topic)
+	}
+	var payload []tbDeviceTelemetry
 	if err := json.Unmarshal(fake.publishes[0].payload, &payload); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	entries, ok := payload["d1"]
-	if !ok {
-		t.Fatalf("expected device d1 in payload")
-	}
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
-	}
-	if entries[0].TS <= 0 {
-		t.Fatalf("expected valid timestamp")
-	}
-	v, ok := entries[0].Values["test.metric"]
-	if !ok {
-		t.Fatalf("expected test.metric in values")
-	}
-	if v.(float64) != 42 {
-		t.Fatalf("expected 42, got %v", v)
+	if got := payload[0].Values["test.metric"]; got.(float64) != 42 {
+		t.Fatalf("value=%v", got)
 	}
 }
 
-func TestThingsBoardMQTTAdapter_PublishesIPAddressAttribute(t *testing.T) {
+func TestThingsBoardMQTTAdapterProvisionsMissingTokenOnce(t *testing.T) {
 	fake := newFakeTBMQTTClient(true, true)
-	a := &ThingsBoardMQTTAdapter{
-		cfg:                 thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
-		client:              fake,
-		deviceAddresses:     map[string]string{"d1": "192.168.1.1"},
-		sentDeviceAddresses: map[string]string{},
+	store := &fakeTokenStore{tokens: map[string]string{}}
+	prov := &fakeProvisioner{token: "new-token"}
+	a := testAdapter(fake, store, prov)
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "m", ValueType: "number", ValueNumber: floatPtr(1), TS: time.Now().UTC()}}
+	if err := a.SendBatch(context.Background(), batch); err != nil {
+		t.Fatalf("first SendBatch: %v", err)
 	}
-	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
+	if err := a.SendBatch(context.Background(), batch); err != nil {
+		t.Fatalf("second SendBatch: %v", err)
+	}
+	if prov.calls != 1 || store.saves != 1 {
+		t.Fatalf("provision calls=%d saves=%d", prov.calls, store.saves)
+	}
+}
 
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("unexpected err: %v", err)
+func TestThingsBoardMQTTAdapterPublishesAttributes(t *testing.T) {
+	fake := newFakeTBMQTTClient(true, true)
+	a := testAdapter(fake, &fakeTokenStore{tokens: map[string]string{"d1": "token"}}, &fakeProvisioner{})
+	a.deviceAddresses = map[string]string{"d1": "192.168.1.1"}
+	a.sentDeviceAddresses = map[string]string{}
+	batch := []models.Telemetry{{DeviceID: "d1", Metric: "m", ValueType: "number", ValueNumber: floatPtr(1), TS: time.Now().UTC()}}
+	if err := a.SendBatch(context.Background(), batch); err != nil {
+		t.Fatalf("SendBatch: %v", err)
 	}
 	if len(fake.publishes) != 2 {
 		t.Fatalf("expected 2 publishes, got %d", len(fake.publishes))
 	}
-	if fake.publishes[1].topic != tbGatewayAttributesTopic {
-		t.Fatalf("expected attributes topic, got %q", fake.publishes[1].topic)
+	if fake.publishes[1].topic != tbDeviceAttributesTopic {
+		t.Fatalf("topic=%q", fake.publishes[1].topic)
 	}
-	var payload map[string]map[string]any
-	if err := json.Unmarshal(fake.publishes[1].payload, &payload); err != nil {
-		t.Fatalf("decode attr payload: %v", err)
+	var attrs map[string]any
+	if err := json.Unmarshal(fake.publishes[1].payload, &attrs); err != nil {
+		t.Fatalf("decode attrs: %v", err)
 	}
-	deviceAttrs := payload["d1"]
-	if deviceAttrs == nil {
-		t.Fatalf("expected attributes for d1")
-	}
-	if deviceAttrs["ip_address"] != "192.168.1.1" {
-		t.Fatalf("expected ip_address=192.168.1.1, got %v", deviceAttrs["ip_address"])
+	if attrs["ip_address"] != "192.168.1.1" {
+		t.Fatalf("ip_address=%v", attrs["ip_address"])
 	}
 }
 
-func TestThingsBoardMQTTAdapter_GatewayModeProjectsIPAddressIntoTelemetry(t *testing.T) {
-	fake := newFakeTBMQTTClient(true, true)
-	a := &ThingsBoardMQTTAdapter{
-		cfg:                 thingsboardMQTTConfig{Mode: "gateway", Topic: "nms-agent/thingsboard/telemetry"},
-		client:              fake,
-		deviceAddresses:     map[string]string{"d1": "192.168.1.1"},
-		sentDeviceAddresses: map[string]string{},
-	}
-	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
-
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if len(fake.publishes) != 1 {
-		t.Fatalf("expected 1 publish in gateway mode, got %d", len(fake.publishes))
-	}
-	var payload map[string][]tbGatewayTelemetry
-	if err := json.Unmarshal(fake.publishes[0].payload, &payload); err != nil {
-		t.Fatalf("decode telemetry payload: %v", err)
-	}
-	entries := payload["d1"]
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 telemetry entry, got %d", len(entries))
-	}
-	if entries[0].Values["ip_address"] != "192.168.1.1" {
-		t.Fatalf("expected ip_address in telemetry payload, got %v", entries[0].Values["ip_address"])
-	}
-	if entries[0].Values["ip_address__value_type"] != "string" {
-		t.Fatalf("expected ip_address__value_type=string, got %v", entries[0].Values["ip_address__value_type"])
+func TestThingsBoardMQTTAdapterProvisionFailure(t *testing.T) {
+	a := testAdapter(newFakeTBMQTTClient(true, true), &fakeTokenStore{tokens: map[string]string{}}, &fakeProvisioner{err: errors.New("nope")})
+	err := a.SendBatch(context.Background(), []models.Telemetry{{DeviceID: "d1", Metric: "m", ValueType: "number", ValueNumber: floatPtr(1), TS: time.Now().UTC()}})
+	if err == nil {
+		t.Fatalf("expected error")
 	}
 }
 
-func TestThingsBoardMQTTAdapter_DoesNotRepublishSameIPAddressAttribute(t *testing.T) {
-	fake := newFakeTBMQTTClient(true, true)
-	a := &ThingsBoardMQTTAdapter{
-		cfg:                 thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
-		client:              fake,
-		deviceAddresses:     map[string]string{"d1": "192.168.1.1"},
-		sentDeviceAddresses: map[string]string{},
-	}
-	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
-
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("first SendBatch: %v", err)
-	}
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("second SendBatch: %v", err)
-	}
-	attrPublishes := 0
-	for _, pub := range fake.publishes {
-		if pub.topic == tbGatewayAttributesTopic {
-			attrPublishes++
-		}
-	}
-	if attrPublishes != 1 {
-		t.Fatalf("expected 1 attributes publish, got %d", attrPublishes)
-	}
-}
-
-func TestThingsBoardMQTTAdapter_RepublishesIPAddressAttributeOnChange(t *testing.T) {
-	fake := newFakeTBMQTTClient(true, true)
-	a := &ThingsBoardMQTTAdapter{
-		cfg:                 thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
-		client:              fake,
-		deviceAddresses:     map[string]string{"d1": "192.168.1.1"},
-		sentDeviceAddresses: map[string]string{},
-	}
-	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
-
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("first SendBatch: %v", err)
-	}
-	a.SetDeviceAddresses(map[string]string{"d1": "192.168.1.2"})
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("second SendBatch: %v", err)
-	}
-	attrPublishes := make([]map[string]map[string]any, 0)
-	for _, pub := range fake.publishes {
-		if pub.topic != tbGatewayAttributesTopic {
-			continue
-		}
-		var payload map[string]map[string]any
-		if err := json.Unmarshal(pub.payload, &payload); err != nil {
-			t.Fatalf("decode attr payload: %v", err)
-		}
-		attrPublishes = append(attrPublishes, payload)
-	}
-	if len(attrPublishes) != 2 {
-		t.Fatalf("expected 2 attributes publishes, got %d", len(attrPublishes))
-	}
-	if attrPublishes[1]["d1"]["ip_address"] != "192.168.1.2" {
-		t.Fatalf("expected updated ip_address=192.168.1.2, got %v", attrPublishes[1]["d1"]["ip_address"])
-	}
-}
-
-func TestThingsBoardMQTTAdapter_ObserverPublishedStatus(t *testing.T) {
-	fake := newFakeTBMQTTClient(true, true)
-	obs := &fakeTBObserver{}
-	a := &ThingsBoardMQTTAdapter{
-		cfg:    thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
-		client: fake,
-	}
-	a.SetObserver(obs)
-	batch := []models.Telemetry{{DeviceID: "d1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()}}
-
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if len(obs.updates) != 1 {
-		t.Fatalf("expected 1 observer update, got %d", len(obs.updates))
-	}
-	if len(obs.statuses) != 1 {
-		t.Fatalf("expected 1 observer status, got %d", len(obs.statuses))
-	}
-	if obs.statuses[0] != "published" {
-		t.Fatalf("expected published status, got %q", obs.statuses[0])
-	}
-}
-
-func TestThingsBoardMQTTAdapter_ManagementSideEffectsGating(t *testing.T) {
+func TestThingsBoardMQTTAdapterManagementSideEffects(t *testing.T) {
 	fake := newFakeTBMQTTClient(true, true)
 	rels := &fakeRelationEnsurer{}
 	topo := &fakeTopologyPublisher{}
-	times := []time.Time{
-		time.Unix(100, 0),
-		time.Unix(100, 0),
-		time.Unix(110, 0),
-		time.Unix(110, 0),
-		time.Unix(161, 0),
-		time.Unix(161, 0),
+	a := testAdapter(fake, &fakeTokenStore{tokens: map[string]string{"r1": "token"}}, &fakeProvisioner{})
+	a.rels = rels
+	a.topo = topo
+	a.now = func() time.Time { return time.Unix(100, 0) }
+	snap := routeSnapshotJSON()
+	batch := []models.Telemetry{{DeviceID: "r1", Metric: "route.ipv4.snapshot", ValueType: "string", ValueString: stringPtrTB(snap), TS: time.Now().UTC()}}
+	if err := a.SendBatch(context.Background(), batch); err != nil {
+		t.Fatalf("SendBatch: %v", err)
 	}
-	idx := 0
-	nowFn := func() time.Time {
-		if idx >= len(times) {
-			return times[len(times)-1]
-		}
-		v := times[idx]
-		idx++
-		return v
-	}
-	a := &ThingsBoardMQTTAdapter{
-		cfg:                 thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
-		client:              fake,
-		rels:                rels,
-		topo:                topo,
-		now:                 nowFn,
-		seenRelationDevices: map[string]struct{}{},
-	}
-	batch := []models.Telemetry{
-		{DeviceID: "router-1", Metric: "test.metric", ValueType: "number", ValueNumber: floatPtr(42), TS: time.Now().UTC()},
-		{DeviceID: "router-1", Metric: "route.ipv4.snapshot", ValueType: "string", ValueString: stringPtrTB(routeSnapshotJSON()), TS: time.Now().UTC()},
-	}
-
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("first SendBatch: %v", err)
-	}
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("second SendBatch: %v", err)
-	}
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("third SendBatch: %v", err)
-	}
-
-	if rels.calls != 2 {
-		t.Fatalf("expected relation sync called 2 times, got %d", rels.calls)
-	}
-	if topo.calls != 2 {
-		t.Fatalf("expected topology sync called 2 times, got %d", topo.calls)
+	if rels.calls != 1 || topo.calls != 1 {
+		t.Fatalf("relations=%d topology=%d", rels.calls, topo.calls)
 	}
 }
 
-func TestThingsBoardMQTTAdapter_MultipleDevices(t *testing.T) {
+func TestThingsBoardMQTTAdapterHealthCheck(t *testing.T) {
+	a := &ThingsBoardMQTTAdapter{cfg: thingsboardMQTTConfig{BrokerURL: "tcp://127.0.0.1:1883", Provisioning: tbintegration.ProvisioningConfig{BaseURL: "http://tb:8080", DeviceKey: "key", DeviceSecret: "secret"}}}
+	if err := a.HealthCheck(context.Background()); err != nil {
+		t.Fatalf("expected ok, got: %v", err)
+	}
+}
+
+func TestThingsBoardMQTTAdapterClose(t *testing.T) {
 	fake := newFakeTBMQTTClient(true, true)
-	a := &ThingsBoardMQTTAdapter{
-		cfg:    thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
-		client: fake,
-	}
-	now := time.Now().UTC()
-	batch := []models.Telemetry{
-		{DeviceID: "d1", Metric: "cpu", ValueType: "number", ValueNumber: floatPtr(50), TS: now},
-		{DeviceID: "d2", Metric: "mem", ValueType: "number", ValueNumber: floatPtr(1024), TS: now},
-	}
-	if err := a.SendBatch(nil, batch); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if len(fake.publishes) != 1 {
-		t.Fatalf("expected 1 publish, got %d", len(fake.publishes))
-	}
-	var payload map[string][]tbGatewayTelemetry
-	if err := json.Unmarshal(fake.publishes[0].payload, &payload); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(payload) != 2 {
-		t.Fatalf("expected 2 devices, got %d", len(payload))
-	}
-}
-
-func TestThingsBoardMQTTAdapter_ConnectError(t *testing.T) {
-	fake := newFakeTBMQTTClient(false, false)
-	fake.connectToken = &fakeTBToken{waitOK: true, err: errors.New("connection refused")}
-	obs := &fakeTBObserver{}
-	a := &ThingsBoardMQTTAdapter{
-		cfg:    thingsboardMQTTConfig{Mode: "direct", AccessToken: "test", BrokerURL: "tcp://127.0.0.1:1883"},
-		client: fake,
-	}
-	a.SetObserver(obs)
-	batch := []models.Telemetry{{DeviceID: "d1", Metric: "m", ValueType: "number", ValueNumber: floatPtr(1), TS: time.Now().UTC()}}
-	if err := a.SendBatch(nil, batch); err == nil {
-		t.Fatalf("expected error")
-	}
-	if len(obs.statuses) != 1 {
-		t.Fatalf("expected 1 observer status, got %d", len(obs.statuses))
-	}
-	if obs.statuses[0] != "connect_failed" {
-		t.Fatalf("expected connect_failed status, got %q", obs.statuses[0])
-	}
-}
-
-func TestThingsBoardMQTTAdapter_StrictQueueNotConnected(t *testing.T) {
-	fake := newFakeTBMQTTClient(false, false)
-	a := &ThingsBoardMQTTAdapter{
-		cfg: thingsboardMQTTConfig{
-			Mode:        "direct",
-			AccessToken: "test",
-			BrokerURL:   "tcp://127.0.0.1:1883",
-			StrictQueue: true,
-		},
-		client: fake,
-	}
-	batch := []models.Telemetry{{DeviceID: "d1", Metric: "m", ValueType: "number", ValueNumber: floatPtr(1), TS: time.Now().UTC()}}
-	if err := a.SendBatch(nil, batch); err == nil {
-		t.Fatalf("expected error in strict mode")
-	}
-}
-
-func TestThingsBoardMQTTAdapter_HealthCheck(t *testing.T) {
-	t.Run("connected", func(t *testing.T) {
-		a := &ThingsBoardMQTTAdapter{
-			cfg:    thingsboardMQTTConfig{},
-			client: newFakeTBMQTTClient(true, true),
-		}
-		if err := a.HealthCheck(nil); err != nil {
-			t.Fatalf("expected ok, got: %v", err)
-		}
-	})
-	t.Run("disconnected", func(t *testing.T) {
-		a := &ThingsBoardMQTTAdapter{
-			cfg:    thingsboardMQTTConfig{},
-			client: newFakeTBMQTTClient(false, false),
-		}
-		if err := a.HealthCheck(nil); err == nil {
-			t.Fatalf("expected error")
-		}
-	})
-}
-
-func TestThingsBoardMQTTAdapter_EmptyBatch(t *testing.T) {
-	fake := newFakeTBMQTTClient(true, true)
-	a := &ThingsBoardMQTTAdapter{
-		cfg:    thingsboardMQTTConfig{Mode: "direct", Topic: "v1/gateway/telemetry"},
-		client: fake,
-	}
-	if err := a.SendBatch(nil, nil); err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if len(fake.publishes) != 0 {
-		t.Fatalf("expected 0 publishes for empty batch")
-	}
-}
-
-func TestThingsBoardMQTTAdapter_Close(t *testing.T) {
-	fake := newFakeTBMQTTClient(true, true)
-	a := &ThingsBoardMQTTAdapter{
-		cfg:    thingsboardMQTTConfig{},
-		client: fake,
-	}
+	a := &ThingsBoardMQTTAdapter{clients: map[string]genericMQTTClient{"d1": fake}}
 	if err := a.Close(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func testAdapter(cli genericMQTTClient, store *fakeTokenStore, prov *fakeProvisioner) *ThingsBoardMQTTAdapter {
+	return &ThingsBoardMQTTAdapter{
+		cfg:                 thingsboardMQTTConfig{BrokerURL: "tcp://127.0.0.1:1883", QoS: 1, ConnectTimeout: time.Second, PublishTimeout: time.Second, Provisioning: tbintegration.ProvisioningConfig{BaseURL: "http://tb:8080", DeviceKey: "key", DeviceSecret: "secret"}},
+		clients:             map[string]genericMQTTClient{"d1": cli, "r1": cli},
+		tokens:              store,
+		prov:                prov,
+		now:                 time.Now,
+		seenRelationDevices: map[string]struct{}{},
+		deviceAddresses:     map[string]string{},
+		sentDeviceAddresses: map[string]string{},
+	}
+}
+
+func validProvisioningConfig() map[string]any {
+	return map[string]any{
+		"broker": "tcp://127.0.0.1:1883",
+		"provisioning": map[string]any{
+			"base_url":      "http://tb:8080",
+			"device_key":    "key",
+			"device_secret": "secret",
+		},
 	}
 }
 

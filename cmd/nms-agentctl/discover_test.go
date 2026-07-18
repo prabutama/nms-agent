@@ -163,7 +163,7 @@ func TestDiscoveryStatus_PrintsConfig(t *testing.T) {
 	if err := applyDiscoveryCLIOverrides(&loaded, "192.168.10.0/24", "eth0", "active", "public", 0, -1, 0, 10, "", false, true); err != nil {
 		t.Fatal(err)
 	}
-	configContent := "agent:\n  poll_interval: 1s\npaths:\n  devices_dir: devices.d\n  thresholds_file: thresholds.yml\n  adapters_file: adapters.yml\n  profiles_dir: profiles\n  queue_db: queue.db\ndiscovery:\n  enabled: true\n  interface: eth0\n  subnet: 192.168.10.0/24\n  provider: active\n  snmp:\n    version: v2c\n    community: public\n    timeout: 2s\n    retries: 1\n    concurrency: 4\n  auto_promote:\n    enabled: true\n    require_profile_match: true\n    max_new_devices_per_cycle: 10\n    device_id_template: '{{vendor}}-{{sys_name}}'\n  exploration:\n    enabled: false\n"
+	configContent := "agent:\n  poll_interval: 1s\npaths:\n  devices_dir: devices.d\n  thresholds_file: thresholds.yml\n  adapters_file: adapters.yml\n  profiles_dir: profiles\n  nms_agent_db: nms-agent.db\ndiscovery:\n  enabled: true\n  interface: eth0\n  subnet: 192.168.10.0/24\n  provider: active\n  snmp:\n    version: v2c\n    community: public\n    timeout: 2s\n    retries: 1\n    concurrency: 4\n  auto_promote:\n    enabled: true\n    require_profile_match: true\n    max_new_devices_per_cycle: 10\n    device_id_template: '{{vendor}}-{{sys_name}}'\n  exploration:\n    enabled: false\n"
 	if err := os.WriteFile(agentYml, []byte(configContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +293,7 @@ func writeDiscoveryAgentFiles(t *testing.T, dir string) string {
 	}
 	writeDiscoveryProfile(t, filepath.Join(profilesDir, "standard.yml"), "standard", "", "")
 	writeDiscoveryProfile(t, filepath.Join(profilesDir, "linux.yml"), "linux-default", "linux", "")
-	agentContent := "agent:\n  poll_interval: 1s\npaths:\n  devices_dir: devices.d\n  thresholds_file: thresholds.yml\n  adapters_file: adapters.yml\n  profiles_dir: profiles\n  queue_db: queue.db\n"
+	agentContent := "agent:\n  poll_interval: 1s\npaths:\n  devices_dir: devices.d\n  thresholds_file: thresholds.yml\n  adapters_file: adapters.yml\n  profiles_dir: profiles\n  nms_agent_db: nms-agent.db\n"
 	agentYml := filepath.Join(dir, "agent.yml")
 	if err := os.WriteFile(agentYml, []byte(agentContent), 0o644); err != nil {
 		t.Fatal(err)

@@ -1,9 +1,0 @@
-# HQ — Core Router
-id: hq-core-router-1
-address: 10.0.0.1
-vendor: mikrotik
-model: routeros
-icmp:
-  enabled: true
-snmp:
-  enabled: true

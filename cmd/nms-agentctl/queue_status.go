@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"nms-agent/internal/config"
 	"nms-agent/internal/queue"
@@ -28,7 +29,13 @@ func runQueueStatus(args []string) int {
 		return 1
 	}
 
-	q, err := queue.OpenSQLite(cfg.Root.Paths.QueueDB)
+	absCfg, err := filepath.Abs(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	dbPath := config.ResolvePath(filepath.Dir(absCfg), cfg.Root.Paths.NMSAgentDB)
+	q, err := queue.OpenSQLite(dbPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
@@ -42,6 +49,6 @@ func runQueueStatus(args []string) int {
 	}
 
 	// Stable, short output.
-	fmt.Fprintf(os.Stdout, "queue_db=%s pending=%d dead_letter=%d max_retry=%d\n", cfg.Root.Paths.QueueDB, st.PendingCount, st.DeadLetterCount, st.MaxRetry)
+	fmt.Fprintf(os.Stdout, "nms_agent_db=%s pending=%d dead_letter=%d max_retry=%d\n", dbPath, st.PendingCount, st.DeadLetterCount, st.MaxRetry)
 	return 0
 }

@@ -124,8 +124,9 @@ type Paths struct {
 	DevicesDir     string `yaml:"devices_dir"`
 	ThresholdsFile string `yaml:"thresholds_file"`
 	AdaptersFile   string `yaml:"adapters_file"`
-	QueueDB        string `yaml:"queue_db"`
+	NMSAgentDB     string `yaml:"nms_agent_db"`
 	ProfilesDir    string `yaml:"profiles_dir"`
+	ViewSocket     string `yaml:"view_socket"`
 }
 
 type Discovery struct {

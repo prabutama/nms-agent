@@ -20,11 +20,6 @@ import (
 
 type thingsboardMQTTConfig struct {
 	BrokerURL      string
-	Mode           string
-	Topic          string
-	AccessToken    string
-	Username       string
-	Password       string
 	ClientID       string
 	QoS            byte
 	Retain         bool
@@ -32,6 +27,7 @@ type thingsboardMQTTConfig struct {
 	StrictQueue    bool
 	ConnectTimeout time.Duration
 	PublishTimeout time.Duration
+	Provisioning   tbintegration.ProvisioningConfig
 	Integration    tbintegration.Config
 }
 
@@ -48,9 +44,18 @@ type topologyPublisher interface {
 	PublishIfChanged(ctx context.Context, snapshots []routes.RouteSnapshot) error
 }
 
+type tokenStore interface {
+	GetThingsBoardToken(ctx context.Context, deviceID string) (string, bool, error)
+	SaveThingsBoardToken(ctx context.Context, deviceID, token string) error
+	MarkThingsBoardTokenUsed(ctx context.Context, deviceID string) error
+}
+
+type deviceProvisioner interface {
+	ProvisionDevice(ctx context.Context, deviceName string) (string, error)
+}
+
 func parseConfig(cfg map[string]any) (thingsboardMQTTConfig, error) {
 	c := thingsboardMQTTConfig{
-		Mode:           "direct",
 		QoS:            1,
 		Retain:         false,
 		AutoReconnect:  true,
@@ -61,27 +66,25 @@ func parseConfig(cfg map[string]any) (thingsboardMQTTConfig, error) {
 	if cfg == nil {
 		return c, errors.New("thingsboard_mqtt config is required")
 	}
+	for _, oldKey := range []string{"mode", "topic", "access_token"} {
+		if _, ok := cfg[oldKey]; ok {
+			return c, fmt.Errorf("thingsboard_mqtt no longer supports config key %q", oldKey)
+		}
+	}
 
 	if v, ok := cfg["broker"].(string); ok {
 		c.BrokerURL = strings.TrimSpace(v)
 	}
-	if v, ok := cfg["mode"].(string); ok {
-		c.Mode = strings.TrimSpace(strings.ToLower(v))
-	}
-	if v, ok := cfg["topic"].(string); ok {
-		v = strings.TrimSpace(v)
-		if v != "" {
-			c.Topic = v
+	if v, ok := cfg["provisioning"].(map[string]any); ok {
+		if s, ok := v["base_url"].(string); ok {
+			c.Provisioning.BaseURL = strings.TrimSpace(s)
 		}
-	}
-	if v, ok := cfg["access_token"].(string); ok {
-		c.AccessToken = strings.TrimSpace(v)
-	}
-	if v, ok := cfg["username"].(string); ok {
-		c.Username = strings.TrimSpace(v)
-	}
-	if v, ok := cfg["password"].(string); ok {
-		c.Password = v
+		if s, ok := v["device_key"].(string); ok {
+			c.Provisioning.DeviceKey = strings.TrimSpace(s)
+		}
+		if s, ok := v["device_secret"].(string); ok {
+			c.Provisioning.DeviceSecret = strings.TrimSpace(s)
+		}
 	}
 	if v, ok := cfg["thingsboard"].(map[string]any); ok {
 		if api, ok := v["api"].(map[string]any); ok {
@@ -152,21 +155,14 @@ func parseConfig(cfg map[string]any) (thingsboardMQTTConfig, error) {
 	if c.BrokerURL == "" {
 		return c, errors.New("thingsboard_mqtt requires config key 'broker'")
 	}
-	switch c.Mode {
-	case "", "direct":
-		c.Mode = "direct"
-		if c.Topic == "" {
-			c.Topic = "v1/gateway/telemetry"
-		}
-		if c.AccessToken == "" {
-			return c, errors.New("thingsboard_mqtt requires config key 'access_token'")
-		}
-	case "gateway":
-		if c.Topic == "" {
-			c.Topic = "nms-agent/thingsboard/telemetry"
-		}
-	default:
-		return c, errors.New("thingsboard_mqtt requires config key 'mode' to be 'direct' or 'gateway'")
+	if c.Provisioning.BaseURL == "" {
+		return c, errors.New("thingsboard_mqtt requires config key 'provisioning.base_url'")
+	}
+	if c.Provisioning.DeviceKey == "" {
+		return c, errors.New("thingsboard_mqtt requires config key 'provisioning.device_key'")
+	}
+	if c.Provisioning.DeviceSecret == "" {
+		return c, errors.New("thingsboard_mqtt requires config key 'provisioning.device_secret'")
 	}
 	if !strings.Contains(c.BrokerURL, "://") {
 		c.BrokerURL = "tcp://" + c.BrokerURL
@@ -194,13 +190,15 @@ type genericMQTTClient interface {
 }
 
 type ThingsBoardMQTTAdapter struct {
-	cfg    thingsboardMQTTConfig
-	client genericMQTTClient
-	obs    base.AdapterObserver
-	rest   *tbintegration.Client
-	rels   relationEnsurer
-	topo   topologyPublisher
-	alarms *tbintegration.AlarmManager
+	cfg     thingsboardMQTTConfig
+	clients map[string]genericMQTTClient
+	obs     base.AdapterObserver
+	rest    *tbintegration.Client
+	rels    relationEnsurer
+	topo    topologyPublisher
+	alarms  *tbintegration.AlarmManager
+	tokens  tokenStore
+	prov    deviceProvisioner
 
 	now                 func() time.Time
 	lastRelationSync    time.Time
@@ -208,6 +206,14 @@ type ThingsBoardMQTTAdapter struct {
 	seenRelationDevices map[string]struct{}
 	deviceAddresses     map[string]string
 	sentDeviceAddresses map[string]string
+}
+
+func (a *ThingsBoardMQTTAdapter) SetThingsBoardTokenStore(store interface {
+	GetThingsBoardToken(context.Context, string) (string, bool, error)
+	SaveThingsBoardToken(context.Context, string, string) error
+	MarkThingsBoardTokenUsed(context.Context, string) error
+}) {
+	a.tokens = store
 }
 
 func (a *ThingsBoardMQTTAdapter) SetObserver(hub base.AdapterObserver) {
@@ -240,23 +246,7 @@ func NewAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, error) {
 		c.AutoReconnect = false
 	}
 
-	opts := mqtt.NewClientOptions().AddBroker(c.BrokerURL)
-	if c.ClientID != "" {
-		opts.SetClientID(c.ClientID)
-	}
-	if c.Mode == "direct" {
-		opts.SetUsername(c.AccessToken)
-		opts.SetPassword("")
-	} else if c.Username != "" {
-		opts.SetUsername(c.Username)
-		opts.SetPassword(c.Password)
-	}
-	opts.SetConnectTimeout(c.ConnectTimeout)
-	opts.SetAutoReconnect(c.AutoReconnect)
-	opts.SetCleanSession(true)
-
-	cli := mqtt.NewClient(opts)
-	adapter := &ThingsBoardMQTTAdapter{cfg: c, client: cli, now: time.Now, seenRelationDevices: map[string]struct{}{}, deviceAddresses: map[string]string{}, sentDeviceAddresses: map[string]string{}}
+	adapter := &ThingsBoardMQTTAdapter{cfg: c, clients: map[string]genericMQTTClient{}, prov: tbintegration.NewProvisioningClient(c.Provisioning), now: time.Now, seenRelationDevices: map[string]struct{}{}, deviceAddresses: map[string]string{}, sentDeviceAddresses: map[string]string{}}
 	if c.Integration.API.BaseURL != "" && c.Integration.API.APIKey != "" && c.Integration.Site.AssetID != "" {
 		rest := tbintegration.NewClient(c.Integration.API)
 		adapter.rest = rest
@@ -267,15 +257,40 @@ func NewAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, error) {
 	return adapter, nil
 }
 
-func (a *ThingsBoardMQTTAdapter) ensureConnected(ctx context.Context) error {
+func (a *ThingsBoardMQTTAdapter) clientForDevice(deviceID, token string) genericMQTTClient {
+	if a.clients == nil {
+		a.clients = map[string]genericMQTTClient{}
+	}
+	if cli := a.clients[deviceID]; cli != nil {
+		return cli
+	}
+	opts := mqtt.NewClientOptions().AddBroker(a.cfg.BrokerURL)
+	clientID := a.cfg.ClientID
+	if clientID != "" {
+		clientID = clientID + "-" + sanitizeKeyPart(deviceID)
+	}
+	if clientID != "" {
+		opts.SetClientID(clientID)
+	}
+	opts.SetUsername(token)
+	opts.SetPassword("")
+	opts.SetConnectTimeout(a.cfg.ConnectTimeout)
+	opts.SetAutoReconnect(a.cfg.AutoReconnect)
+	opts.SetCleanSession(true)
+	cli := mqtt.NewClient(opts)
+	a.clients[deviceID] = cli
+	return cli
+}
+
+func (a *ThingsBoardMQTTAdapter) ensureConnected(ctx context.Context, cli genericMQTTClient) error {
 	_ = ctx
-	if a == nil || a.client == nil {
+	if a == nil || cli == nil {
 		return errors.New("thingsboard_mqtt adapter not initialized")
 	}
-	if a.client.IsConnected() && a.client.IsConnectionOpen() {
+	if cli.IsConnected() && cli.IsConnectionOpen() {
 		return nil
 	}
-	tok := a.client.Connect()
+	tok := cli.Connect()
 	if !tok.WaitTimeout(a.cfg.ConnectTimeout) {
 		return errors.New("mqtt connect timeout")
 	}
@@ -285,12 +300,15 @@ func (a *ThingsBoardMQTTAdapter) ensureConnected(ctx context.Context) error {
 	return nil
 }
 
-type tbGatewayTelemetry struct {
+type tbDeviceTelemetry struct {
 	TS     int64          `json:"ts"`
 	Values map[string]any `json:"values"`
 }
 
-const tbGatewayAttributesTopic = "v1/gateway/attributes"
+const (
+	tbDeviceTelemetryTopic  = "v1/devices/me/telemetry"
+	tbDeviceAttributesTopic = "v1/devices/me/attributes"
+)
 
 var (
 	tbKeySeparatorChars = regexp.MustCompile(`[\s/:.]+`)
@@ -302,51 +320,43 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	if len(batch) == 0 {
 		return nil
 	}
-	if err := a.ensureConnected(ctx); err != nil {
-		if a.obs != nil {
-			a.obs.UpdateStatus("connect_failed", err.Error())
-		}
-		return err
-	}
-	if a.cfg.StrictQueue && !(a.client.IsConnected() && a.client.IsConnectionOpen()) {
-		if a.obs != nil {
-			a.obs.UpdateStatus("not_connected", "broker unreachable")
-		}
-		return errors.New("mqtt not connected")
-	}
-
-	telemetryPayload, attrPayload, err := buildPayloads(a.cfg.Mode, batch)
+	telemetryPayload, attrPayload, err := buildPayloads(batch)
 	if err != nil {
 		return err
 	}
-	a.mergeDeviceAddressAttributes(telemetryPayload, attrPayload, batch)
-	b, err := json.Marshal(telemetryPayload)
-	if err != nil {
-		return fmt.Errorf("marshal thingsboard payload: %w", err)
-	}
-	if a.cfg.StrictQueue && !(a.client.IsConnected() && a.client.IsConnectionOpen()) {
-		return errors.New("mqtt not connected")
-	}
-	tok := a.client.Publish(a.cfg.Topic, a.cfg.QoS, a.cfg.Retain, b)
-	if !tok.WaitTimeout(a.cfg.PublishTimeout) {
-		return errors.New("mqtt publish timeout")
-	}
-	if err := tok.Error(); err != nil {
-		return fmt.Errorf("mqtt publish: %w", err)
-	}
-	if len(attrPayload) > 0 {
-		attrBytes, err := json.Marshal(attrPayload)
+	a.mergeDeviceAddressAttributes(attrPayload, batch)
+	for _, deviceID := range uniqueDeviceNames(batch) {
+		token, err := a.tokenForDevice(ctx, deviceID)
 		if err != nil {
-			return fmt.Errorf("marshal thingsboard attributes payload: %w", err)
+			return err
 		}
-		attrTok := a.client.Publish(tbGatewayAttributesTopic, a.cfg.QoS, a.cfg.Retain, attrBytes)
-		if !attrTok.WaitTimeout(a.cfg.PublishTimeout) {
-			return errors.New("mqtt publish timeout")
+		cli := a.clientForDevice(deviceID, token)
+		if err := a.ensureConnected(ctx, cli); err != nil {
+			if a.obs != nil {
+				a.obs.UpdateStatus("connect_failed", err.Error())
+			}
+			return err
 		}
-		if err := attrTok.Error(); err != nil {
-			return fmt.Errorf("mqtt publish attributes: %w", err)
+		if a.cfg.StrictQueue && !(cli.IsConnected() && cli.IsConnectionOpen()) {
+			if a.obs != nil {
+				a.obs.UpdateStatus("not_connected", "broker unreachable")
+			}
+			return errors.New("mqtt not connected")
 		}
-		a.markDeviceAddressAttributesSent(attrPayload, telemetryPayload)
+		if entries := telemetryPayload[deviceID]; len(entries) > 0 {
+			if err := a.publishJSON(cli, tbDeviceTelemetryTopic, entries, "thingsboard telemetry"); err != nil {
+				return err
+			}
+		}
+		if attrs := attrPayload[deviceID]; len(attrs) > 0 {
+			if err := a.publishJSON(cli, tbDeviceAttributesTopic, attrs, "thingsboard attributes"); err != nil {
+				return err
+			}
+			a.markDeviceAddressAttributesSent(deviceID, attrs)
+		}
+		if a.tokens != nil {
+			_ = a.tokens.MarkThingsBoardTokenUsed(ctx, deviceID)
+		}
 	}
 	if a.obs != nil {
 		a.obs.Update(batch)
@@ -356,7 +366,44 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 	return nil
 }
 
-func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(telemetryPayload map[string][]tbGatewayTelemetry, attrPayload map[string]map[string]any, batch []models.Telemetry) {
+func (a *ThingsBoardMQTTAdapter) publishJSON(cli genericMQTTClient, topic string, payload any, label string) error {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal %s payload: %w", label, err)
+	}
+	tok := cli.Publish(topic, a.cfg.QoS, a.cfg.Retain, b)
+	if !tok.WaitTimeout(a.cfg.PublishTimeout) {
+		return errors.New("mqtt publish timeout")
+	}
+	if err := tok.Error(); err != nil {
+		return fmt.Errorf("mqtt publish: %w", err)
+	}
+	return nil
+}
+
+func (a *ThingsBoardMQTTAdapter) tokenForDevice(ctx context.Context, deviceID string) (string, error) {
+	if a.tokens == nil {
+		return "", errors.New("thingsboard token store is not configured")
+	}
+	if token, ok, err := a.tokens.GetThingsBoardToken(ctx, deviceID); err != nil {
+		return "", err
+	} else if ok {
+		return token, nil
+	}
+	if a.prov == nil {
+		return "", errors.New("thingsboard provisioning client is not configured")
+	}
+	token, err := a.prov.ProvisionDevice(ctx, deviceID)
+	if err != nil {
+		return "", err
+	}
+	if err := a.tokens.SaveThingsBoardToken(ctx, deviceID, token); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(attrPayload map[string]map[string]any, batch []models.Telemetry) {
 	if len(batch) == 0 || len(a.deviceAddresses) == 0 {
 		return
 	}
@@ -368,19 +415,6 @@ func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(telemetryPayload m
 		if address == "" || a.sentDeviceAddresses[deviceID] == address {
 			continue
 		}
-		if a.cfg.Mode == "gateway" {
-			entries := telemetryPayload[deviceID]
-			if len(entries) == 0 {
-				continue
-			}
-			entries[0].Values["ip_address"] = address
-			entries[0].Values["ip_address__value_type"] = "string"
-			telemetryPayload[deviceID] = entries
-			continue
-		}
-		if attrPayload == nil {
-			continue
-		}
 		deviceAttrs := attrPayload[deviceID]
 		if deviceAttrs == nil {
 			deviceAttrs = map[string]any{}
@@ -390,28 +424,14 @@ func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(telemetryPayload m
 	}
 }
 
-func (a *ThingsBoardMQTTAdapter) markDeviceAddressAttributesSent(attrPayload map[string]map[string]any, telemetryPayload map[string][]tbGatewayTelemetry) {
-	if len(attrPayload) == 0 && len(telemetryPayload) == 0 {
+func (a *ThingsBoardMQTTAdapter) markDeviceAddressAttributesSent(deviceID string, attrs map[string]any) {
+	if len(attrs) == 0 {
 		return
 	}
 	if a.sentDeviceAddresses == nil {
 		a.sentDeviceAddresses = map[string]string{}
 	}
-	for deviceID, attrs := range attrPayload {
-		ip, ok := attrs["ip_address"].(string)
-		if !ok || ip == "" {
-			continue
-		}
-		a.sentDeviceAddresses[deviceID] = ip
-	}
-	for deviceID, entries := range telemetryPayload {
-		if len(entries) == 0 {
-			continue
-		}
-		ip, ok := entries[0].Values["ip_address"].(string)
-		if !ok || ip == "" {
-			continue
-		}
+	if ip, ok := attrs["ip_address"].(string); ok && ip != "" {
 		a.sentDeviceAddresses[deviceID] = ip
 	}
 }
@@ -530,7 +550,7 @@ func routeSnapshotsFromBatch(batch []models.Telemetry) []routes.RouteSnapshot {
 	return out
 }
 
-func buildPayloads(mode string, batch []models.Telemetry) (map[string][]tbGatewayTelemetry, map[string]map[string]any, error) {
+func buildPayloads(batch []models.Telemetry) (map[string][]tbDeviceTelemetry, map[string]map[string]any, error) {
 	byDevice := make(map[string]map[int64]map[string]any)
 	orderedTS := make(map[string][]int64)
 	attrs := make(map[string]map[string]any)
@@ -549,7 +569,7 @@ func buildPayloads(mode string, batch []models.Telemetry) (map[string][]tbGatewa
 		if flatKey, ok := flattenedIndexedKey(t); ok {
 			metricKey = flatKey
 		}
-		if mode == "direct" && isRouteAttributeMetric(t) {
+		if isRouteAttributeMetric(t) {
 			deviceAttrs := attrs[t.DeviceID]
 			if deviceAttrs == nil {
 				deviceAttrs = make(map[string]any)
@@ -580,11 +600,11 @@ func buildPayloads(mode string, batch []models.Telemetry) (map[string][]tbGatewa
 			values[metricKey+"__tags"] = t.Tags
 		}
 	}
-	out := make(map[string][]tbGatewayTelemetry, len(byDevice))
+	out := make(map[string][]tbDeviceTelemetry, len(byDevice))
 	for deviceID, perTS := range byDevice {
-		entries := make([]tbGatewayTelemetry, 0, len(perTS))
+		entries := make([]tbDeviceTelemetry, 0, len(perTS))
 		for _, ts := range orderedTS[deviceID] {
-			entries = append(entries, tbGatewayTelemetry{TS: ts, Values: perTS[ts]})
+			entries = append(entries, tbDeviceTelemetry{TS: ts, Values: perTS[ts]})
 		}
 		out[deviceID] = entries
 	}
@@ -678,19 +698,24 @@ func sanitizeKeyPart(s string) string {
 }
 
 func (a *ThingsBoardMQTTAdapter) HealthCheck(ctx context.Context) error {
-	if err := a.ensureConnected(ctx); err != nil {
-		return err
+	_ = ctx
+	if a == nil {
+		return errors.New("thingsboard_mqtt adapter not initialized")
 	}
-	if !(a.client.IsConnected() && a.client.IsConnectionOpen()) {
-		return errors.New("mqtt not connected")
+	if a.cfg.BrokerURL == "" || a.cfg.Provisioning.BaseURL == "" || a.cfg.Provisioning.DeviceKey == "" || a.cfg.Provisioning.DeviceSecret == "" {
+		return errors.New("thingsboard_mqtt config is incomplete")
 	}
 	return nil
 }
 
 func (a *ThingsBoardMQTTAdapter) Close() error {
-	if a == nil || a.client == nil {
+	if a == nil {
 		return nil
 	}
-	a.client.Disconnect(250)
+	for _, cli := range a.clients {
+		if cli != nil {
+			cli.Disconnect(250)
+		}
+	}
 	return nil
 }

@@ -1,9 +1,0 @@
-# Branch — Access Switch
-id: branch-access-switch-1
-address: 172.16.0.10
-vendor: cisco
-model: c2960
-icmp:
-  enabled: true
-snmp:
-  enabled: true

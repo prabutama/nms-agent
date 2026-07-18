@@ -49,7 +49,7 @@ func TestQueueRetry_DeliversAndDeletesPending(t *testing.T) {
 		t.Fatalf("WriteFile adapters: %v", err)
 	}
 	agentYml := filepath.Join(tmp, "agent.yml")
-	agentContent := "agent:\n  poll_interval: 1s\npaths:\n  devices_dir: devices.d\n  thresholds_file: thresholds.yml\n  adapters_file: adapters.yml\n  queue_db: " + filepath.ToSlash(dbPath) + "\n"
+	agentContent := "agent:\n  poll_interval: 1s\npaths:\n  devices_dir: devices.d\n  thresholds_file: thresholds.yml\n  adapters_file: adapters.yml\n  nms_agent_db: " + filepath.ToSlash(dbPath) + "\n"
 	if err := os.WriteFile(agentYml, []byte(agentContent), 0o644); err != nil {
 		t.Fatalf("WriteFile agent.yml: %v", err)
 	}

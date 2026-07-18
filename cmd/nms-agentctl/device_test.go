@@ -1,14 +1,62 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"nms-agent/internal/config"
+	"nms-agent/internal/queue"
 
 	yaml "gopkg.in/yaml.v3"
 )
+
+func TestDeviceListShowsMaskedThingsBoardToken(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "nms-agent.db")
+	agentYml := writeAgentFiles(t, tmp, dbPath, "thresholds: []\n")
+	q, err := queue.OpenSQLite(dbPath)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	if err := q.SaveThingsBoardToken(context.Background(), "dev-1", "abcd1234wxyz"); err != nil {
+		t.Fatalf("SaveThingsBoardToken: %v", err)
+	}
+	q.Close()
+
+	out := captureStdout(t, func() {
+		code := runDeviceList([]string{"--config", agentYml})
+		if code != 0 {
+			t.Fatalf("runDeviceList exit code=%d", code)
+		}
+	})
+	if !strings.Contains(out, "tb_token") {
+		t.Fatalf("expected tb_token header, got %q", out)
+	}
+	if !strings.Contains(out, "abcd...wxyz") {
+		t.Fatalf("expected masked token, got %q", out)
+	}
+}
+
+func TestMaskToken(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"", "-"},
+		{"short", "****"},
+		{"12345678", "****"},
+		{"123456789", "1234...6789"},
+		{"  abcdefghijkl  ", "abcd...ijkl"},
+	}
+	for _, tt := range tests {
+		if got := maskToken(tt.in); got != tt.want {
+			t.Fatalf("maskToken(%q)=%q want %q", tt.in, got, tt.want)
+		}
+	}
+}
 
 func TestDeviceAdd_WritesNewDeviceFile(t *testing.T) {
 	tmp := t.TempDir()

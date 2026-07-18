@@ -30,7 +30,13 @@ func runStatus(args []string) int {
 		return 1
 	}
 
-	statusPath := filepath.Join(filepath.Dir(cfg.Root.Paths.QueueDB), "status.json")
+	absCfg, err := filepath.Abs(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	dbPath := config.ResolvePath(filepath.Dir(absCfg), cfg.Root.Paths.NMSAgentDB)
+	statusPath := filepath.Join(filepath.Dir(dbPath), "status.json")
 
 	for {
 		st, err := status.ReadFile(statusPath)

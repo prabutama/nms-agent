@@ -79,6 +79,14 @@ func (q *SQLiteQueue) init(ctx context.Context) error {
 			"last_attempt_at TEXT\n" +
 			");",
 		"CREATE INDEX IF NOT EXISTS idx_queue_items_status_created ON queue_items(status, created_at);",
+		"CREATE TABLE IF NOT EXISTS thingsboard_device_tokens (\n" +
+			"device_id TEXT PRIMARY KEY,\n" +
+			"access_token TEXT NOT NULL,\n" +
+			"credentials_type TEXT NOT NULL DEFAULT 'ACCESS_TOKEN',\n" +
+			"provisioned_at TEXT NOT NULL,\n" +
+			"updated_at TEXT NOT NULL,\n" +
+			"last_used_at TEXT\n" +
+			");",
 	}
 	// Phase 4 migration: add retry columns if missing.
 	for _, alter := range []string{

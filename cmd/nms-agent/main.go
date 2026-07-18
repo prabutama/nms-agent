@@ -90,11 +90,11 @@ func run(args []string) int {
 		"devices", len(loaded.Devices),
 		"adapter.active", loaded.Adapters.Adapters.Active,
 		"output.timezone", loc.String(),
-		"queue.db", loaded.Root.Paths.QueueDB,
+		"nms_agent.db", loaded.Root.Paths.NMSAgentDB,
 		"collector.mode", *collectorMode,
 	)
 
-	queuePath := loaded.Root.Paths.QueueDB
+	queuePath := config.ResolvePath(filepath.Dir(configAbs), loaded.Root.Paths.NMSAgentDB)
 	queueDir := filepath.Dir(queuePath)
 	if queueDir != "." && queueDir != "" {
 		if err := os.MkdirAll(queueDir, 0o755); err != nil {
@@ -165,6 +165,15 @@ func run(args []string) int {
 		if p, ok := ad.(interface{ SetDeviceAddresses(map[string]string) }); ok {
 			p.SetDeviceAddresses(deviceAddressMap(cfg.Devices))
 		}
+		if p, ok := ad.(interface {
+			SetThingsBoardTokenStore(interface {
+				GetThingsBoardToken(context.Context, string) (string, bool, error)
+				SaveThingsBoardToken(context.Context, string, string) error
+				MarkThingsBoardTokenUsed(context.Context, string) error
+			})
+		}); ok {
+			p.SetThingsBoardTokenStore(q.(*queue.SQLiteQueue))
+		}
 		if hub != nil {
 			hub.SetAdapter(cfg.Adapters.Adapters.Active)
 			hub.SetActiveDevices(activeDeviceIDs(cfg.Devices))
@@ -204,7 +213,8 @@ func run(args []string) int {
 	defer stop()
 
 	viewHub := viewer.NewHub(loaded.Adapters.Adapters.Active)
-	viewServer := &viewer.Server{SocketPath: "/run/nms-agent/view.sock", Hub: viewHub}
+	viewSocketPath := resolveViewSocketPath(filepath.Dir(configAbs), loaded.Root.Paths.ViewSocket)
+	viewServer := &viewer.Server{SocketPath: viewSocketPath, Hub: viewHub}
 	if err := viewServer.Listen(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "viewer server error: %v\n", err)
 	}
@@ -470,4 +480,12 @@ func firstDeviceID(cfg config.Loaded) string {
 		return "dummy-1"
 	}
 	return cfg.Devices[0].ID
+}
+
+func resolveViewSocketPath(configDir, configured string) string {
+	configured = strings.TrimSpace(configured)
+	if configured == "" {
+		configured = "/run/nms-agent/view.sock"
+	}
+	return config.ResolvePath(configDir, configured)
 }
