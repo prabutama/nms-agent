@@ -5,6 +5,9 @@ tmp/
 *.log
 .env
 agent.env
+*.env
+configs/*.env
+configs/*.local.yml
 
 .serena/
 .opencode/node_modules/

@@ -25,6 +25,15 @@ func LoadFromFile(path string) (Loaded, error) {
 	}
 
 	baseDir := filepath.Dir(path)
+	if root.Agent.EnvFile != "" {
+		envFile := root.Agent.EnvFile
+		if !filepath.IsAbs(envFile) {
+			envFile = filepath.Join(baseDir, envFile)
+		}
+		if err := loadEnvFile(envFile); err != nil {
+			return Loaded{}, err
+		}
+	}
 	resolve := func(p string) string {
 		p = expandEnv(p)
 		if filepath.IsAbs(p) {
@@ -75,6 +84,7 @@ func loadRoot(path string) (Root, error) {
 	if err != nil {
 		return Root{}, err
 	}
+	root.Agent.EnvFile = strings.TrimSpace(root.Agent.EnvFile)
 	root.Paths.DevicesDir = strings.TrimSpace(root.Paths.DevicesDir)
 	root.Paths.ThresholdsFile = strings.TrimSpace(root.Paths.ThresholdsFile)
 	root.Paths.AdaptersFile = strings.TrimSpace(root.Paths.AdaptersFile)
@@ -91,6 +101,42 @@ func loadRoot(path string) (Root, error) {
 	root.Discovery.Exploration.RunWhen = strings.TrimSpace(root.Discovery.Exploration.RunWhen)
 	root.Discovery.Exploration.OutputDir = strings.TrimSpace(root.Discovery.Exploration.OutputDir)
 	return root, nil
+}
+
+func loadEnvFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			return fmt.Errorf("parse env file %s line %d: expected KEY=value", path, i+1)
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return fmt.Errorf("parse env file %s line %d: empty key", path, i+1)
+		}
+		val = strings.TrimSpace(val)
+		val = strings.Trim(val, `"'`)
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		if err := os.Setenv(key, val); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func loadDevicesDir(dir string) ([]Device, error) {

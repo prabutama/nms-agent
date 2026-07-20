@@ -15,6 +15,7 @@ This document describes current configuration behavior, not phase-history snapsh
 
 ```yaml
 agent:
+  env_file: local.env
   poll_interval: 60s
 
   # Presentation timezone for adapter output only.
@@ -38,6 +39,7 @@ paths:
 
 Notes:
 - `poll_interval` uses Go duration format (e.g. `10s`, `1m`).
+- `agent.env_file` is optional. When set, it loads `KEY=value` pairs relative to `agent.yml` before `${ENV_VAR}` expansion. Existing process environment variables take precedence over values in the file.
 - `agent.output.timezone` controls presentation timezone for adapter output (TUI/MQTT). Default is `UTC`.
   Supported values: IANA (e.g. `Asia/Jakarta`) or fixed offsets like `UTC+7`, `UTC+07:00`.
 - `delivery.*` configures the queue delivery drain loop (Phase 8):
@@ -199,7 +201,15 @@ adapters:
 
 ## .env usage
 
-The binary does not load `.env` files automatically. It expands `${ENV_VAR}` from the current process environment.
+The binary expands `${ENV_VAR}` from the current process environment and from optional `agent.env_file`.
+
+Example `configs/local.env`:
+
+```bash
+TB_URL=https://thingsboard.example.com
+TB_PROVISION_DEVICE_KEY=replace-me
+TB_PROVISION_DEVICE_SECRET=replace-me
+```
 
 This expansion applies to:
 

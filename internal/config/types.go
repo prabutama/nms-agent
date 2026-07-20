@@ -18,6 +18,7 @@ type Root struct {
 
 type Agent struct {
 	PollInterval time.Duration `yaml:"poll_interval"`
+	EnvFile      string        `yaml:"env_file"`
 	Delivery     Delivery      `yaml:"delivery"`
 	Collection   Collection    `yaml:"collection"`
 	Output       Output        `yaml:"output"`

@@ -2,9 +2,10 @@
   "adapter_active": "thingsboard_mqtt",
   "poll_interval": "1m0s",
   "device_count": 1,
-  "uptime": "6m2s",
-  "last_cycle_ok": true,
-  "last_cycle_start": "2026-07-18T23:13:43.652058249+07:00",
+  "uptime": "17m43s",
+  "last_cycle_ok": false,
+  "last_cycle_error": "context canceled",
+  "last_cycle_start": "2026-07-19T19:18:22.3690896+07:00",
   "queue_pending": 0,
   "queue_dead_letter": 0,
   "queue_max_retry": 0

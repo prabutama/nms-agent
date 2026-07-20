@@ -1,4 +1,5 @@
 agent:
+  env_file: local.env
   poll_interval: 60s
   output:
     timezone: UTC+7

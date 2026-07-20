@@ -81,6 +81,7 @@ sudo apt install -y snmp mosquitto-clients sqlite3
 
 ```yaml
 agent:
+  env_file: local.env
   poll_interval: 60s
   output:
     timezone: UTC+7
@@ -184,6 +185,7 @@ nms-agentctl discovery run --config configs/agent.yml
 Notes:
 
 - Always pass `--config` explicitly. Current subcommands do not all use same built-in default path.
+- Use `agent.env_file` for local secrets such as ThingsBoard provisioning key/secret. `configs/*.env` is gitignored.
 - `nms-agentctl queue retry` is currently limited. For empty or `tui` active adapter it uses no-op delivery; real adapter redelivery is not implemented for other adapters yet.
 - `nms-agentctl view` uses `paths.view_socket` when set; production defaults to `/run/nms-agent/view.sock`, while WSL/dev configs can use `data/view.sock`.
 
