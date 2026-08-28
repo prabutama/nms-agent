@@ -33,13 +33,20 @@ func (c DummyCollector) Collect(context.Context) ([]models.RawSample, error) {
 		phase := float64(now.Unix()%300) / 300 * 2 * math.Pi
 		baseLoad := 25.0
 		if strings.Contains(deviceID, "surabaya") {
-			baseLoad = 58
+			baseLoad = 46
 		} else if strings.Contains(deviceID, "makassar") {
-			baseLoad = 76
+			baseLoad = 58
 		}
 		role := demoDeviceRole(deviceID)
-		roleLoadBias := map[string]float64{"router": 8, "firewall": 12, "switch": 4, "server": 18, "ap": 10}[role]
-		load := clamp(baseLoad+roleLoadBias+(seed*13)+16*math.Sin(phase+seed), 5, 98)
+		roleLoadBias := map[string]float64{"router": 5, "firewall": 7, "switch": 4, "server": 10, "ap": 6}[role]
+		load := baseLoad + roleLoadBias + (seed * 9) + 12*math.Sin(phase+seed)
+		if strings.Contains(deviceID, "makassar") && (role == "router" || role == "switch") {
+			load += 14
+		}
+		if strings.Contains(deviceID, "surabaya") && (role == "server" || role == "firewall") {
+			load += 8
+		}
+		load = clamp(load, 5, 96)
 		latency := clamp(8+(seed*3)+4*math.Sin(phase), 2, 80)
 		if strings.Contains(deviceID, "surabaya") {
 			latency = clamp(latency+28+10*math.Abs(math.Sin(phase+seed)), 2, 120)
@@ -48,7 +55,11 @@ func (c DummyCollector) Collect(context.Context) ([]models.RawSample, error) {
 		}
 		loss := 0.0
 		if strings.Contains(deviceID, "makassar") {
-			loss = clamp(4+5*math.Sin(phase+seed), 0, 15)
+			loss = 2.5 + 3.5*math.Sin(phase+seed)
+			if role == "router" || role == "switch" {
+				loss += 2.5
+			}
+			loss = clamp(loss, 0, 11)
 		} else if strings.Contains(deviceID, "surabaya") && (role == "firewall" || role == "switch") {
 			loss = clamp(0.8+1.4*math.Abs(math.Sin(phase+seed)), 0, 4)
 		}
