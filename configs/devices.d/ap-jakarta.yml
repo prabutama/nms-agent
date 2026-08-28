@@ -1,0 +1,9 @@
+id: ap-jakarta
+site_key: jakarta
+address: 10.10.1.20
+vendor: demo
+model: access-point
+icmp:
+  enabled: false
+snmp:
+  enabled: false

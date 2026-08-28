@@ -1,0 +1,9 @@
+id: ap-surabaya
+site_key: surabaya
+address: 10.20.1.20
+vendor: demo
+model: access-point
+icmp:
+  enabled: false
+snmp:
+  enabled: false

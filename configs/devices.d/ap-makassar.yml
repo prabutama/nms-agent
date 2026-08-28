@@ -1,0 +1,9 @@
+id: ap-makassar
+site_key: makassar
+address: 10.30.1.20
+vendor: demo
+model: access-point
+icmp:
+  enabled: false
+snmp:
+  enabled: false

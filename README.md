@@ -201,6 +201,36 @@ SNMP / ICMP Collector
   -> Consumer Platform
 ```
 
+## Multi-site Demo Guide
+
+Demo inventory contains 15 simulated devices across three sites. Each device
+configuration uses `site_key`; the ThingsBoard adapter publishes that value as
+the device `site_key` attribute. Create the matching ThingsBoard asset/device
+relations and site attributes separately, because relations are authoritative
+in ThingsBoard.
+
+```text
+jakarta:  router, firewall, switch, server, access-point
+surabaya: router, firewall, switch, server, access-point
+makassar:  router, firewall, switch, server, access-point
+```
+
+Run one agent process. Dummy mode never contacts configured device addresses:
+
+```bash
+nms-agentctl validate --config configs/agent.yml
+nms-agent run --config configs/agent.yml --collector-mode dummy
+```
+
+Use simulated site coordinates in ThingsBoard asset attributes:
+
+```json
+{"siteKey":"jakarta","latitude":-6.2088,"longitude":106.8456,"region":"DKI Jakarta","demo":true}
+```
+
+The public dashboard reads these attributes through the BFF. It never receives
+ThingsBoard API keys or device access tokens.
+
 ## Demo Guide
 
 1. **Validate config:**

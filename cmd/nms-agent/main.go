@@ -165,6 +165,9 @@ func run(args []string) int {
 		if p, ok := ad.(interface{ SetDeviceAddresses(map[string]string) }); ok {
 			p.SetDeviceAddresses(deviceAddressMap(cfg.Devices))
 		}
+		if p, ok := ad.(interface{ SetDeviceSiteKeys(map[string]string) }); ok {
+			p.SetDeviceSiteKeys(deviceSiteKeyMap(cfg.Devices))
+		}
 		if p, ok := ad.(interface {
 			SetThingsBoardTokenStore(interface {
 				GetThingsBoardToken(context.Context, string) (string, bool, error)
@@ -386,7 +389,7 @@ func buildCollector(mode string, loaded config.Loaded) (collectors.Collector, er
 	hasRealTargets := len(icmpTargets) > 0 || len(snmpTargets) > 0
 
 	if mode == "dummy" || (mode == "auto" && !hasRealTargets) {
-		return collectors.DummyCollector{DeviceID: firstDeviceID(loaded)}, nil
+		return collectors.DummyCollector{DeviceIDs: demoDeviceIDs(loaded.Devices)}, nil
 	}
 	if mode == "real" && !hasRealTargets {
 		return nil, fmt.Errorf("collector-mode=real but no real targets enabled (set devices.d/*.yml icmp.enabled or snmp.enabled)")
@@ -429,6 +432,16 @@ func activeDeviceIDs(devices []config.Device) []string {
 	return out
 }
 
+func demoDeviceIDs(devices []config.Device) []string {
+	out := make([]string, 0, len(devices))
+	for _, d := range devices {
+		if d.ID != "" && d.SiteKey != "" {
+			out = append(out, d.ID)
+		}
+	}
+	return out
+}
+
 func activeDeviceIDSet(devices []config.Device) map[string]struct{} {
 	out := make(map[string]struct{}, len(devices))
 	for _, d := range devices {
@@ -447,6 +460,16 @@ func deviceAddressMap(devices []config.Device) map[string]string {
 			continue
 		}
 		out[d.ID] = d.Address
+	}
+	return out
+}
+
+func deviceSiteKeyMap(devices []config.Device) map[string]string {
+	out := make(map[string]string)
+	for _, d := range devices {
+		if d.ID != "" && d.SiteKey != "" {
+			out[d.ID] = d.SiteKey
+		}
 	}
 	return out
 }

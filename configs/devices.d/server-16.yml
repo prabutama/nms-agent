@@ -7,7 +7,7 @@ model: ""
 
 # Enable real collectors (Phase 5 runtime selection).
 icmp:
-  enabled: true
+  enabled: false
 snmp:
-  enabled: true
+  enabled: false
   

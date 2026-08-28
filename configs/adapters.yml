@@ -12,10 +12,10 @@
 #     strict_queue_mode: true
 
 adapters:
-  active: thingsboard_mqtt
+  active: thingsboard_http
   configs:  
-    broker: tcp://100.127.212.84:1883
-    strict_queue_mode: true
+    # Public reverse proxy exposes HTTPS telemetry, not MQTT.
+    base_url: ${TB_URL}
 
     provisioning:
       base_url: ${TB_URL}

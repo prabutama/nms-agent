@@ -1,0 +1,9 @@
+id: firewall-surabaya
+site_key: surabaya
+address: 10.20.1.2
+vendor: demo
+model: firewall
+icmp:
+  enabled: false
+snmp:
+  enabled: false

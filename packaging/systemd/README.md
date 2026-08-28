@@ -67,3 +67,24 @@ Example:
 TB_URL=https://nms.prabutama.my.id
 TB_API_KEY=replace-with-site-api-key
 ```
+## Public Demo Service
+
+Use `nms-agent-demo.service` for public multi-site demos. It runs the same
+agent binary in background with `--collector-mode dummy`, so no real device
+network access is required.
+
+```bash
+sudo install -m 0644 packaging/systemd/nms-agent-demo.service /etc/systemd/system/nms-agent-demo.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now nms-agent-demo
+sudo journalctl -u nms-agent-demo -f
+```
+
+Expected log:
+
+```text
+cycle_start
+collect_done samples=180
+delivery_ok batch=0 items=180
+cycle_end delivered=180 failed=0
+```

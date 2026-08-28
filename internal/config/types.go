@@ -178,6 +178,7 @@ type DiscoveryExploration struct {
 // Device is loaded from `devices.d/*.yml`.
 type Device struct {
 	ID      string `yaml:"id"`
+	SiteKey string `yaml:"site_key"`
 	Address string `yaml:"address"`
 	Vendor  string `yaml:"vendor"`
 	Model   string `yaml:"model"`

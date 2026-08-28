@@ -34,6 +34,7 @@ type provisioningResponse struct {
 	Status           string `json:"status"`
 	CredentialsType  string `json:"credentialsType"`
 	CredentialsValue string `json:"credentialsValue"`
+	CredentialsID    string `json:"credentialsId"`
 }
 
 func NewProvisioningClient(cfg ProvisioningConfig) *ProvisioningClient {
@@ -79,8 +80,15 @@ func (c *ProvisioningClient) ProvisionDevice(ctx context.Context, deviceName str
 	if !strings.EqualFold(out.Status, "SUCCESS") {
 		return "", fmt.Errorf("thingsboard provisioning failed: status=%s", out.Status)
 	}
-	if !strings.EqualFold(out.CredentialsType, "ACCESS_TOKEN") || strings.TrimSpace(out.CredentialsValue) == "" {
+	if !strings.EqualFold(out.CredentialsType, "ACCESS_TOKEN") {
 		return "", fmt.Errorf("thingsboard provisioning returned unsupported credentials type %q", out.CredentialsType)
 	}
-	return strings.TrimSpace(out.CredentialsValue), nil
+	token := strings.TrimSpace(out.CredentialsValue)
+	if token == "" {
+		token = strings.TrimSpace(out.CredentialsID)
+	}
+	if token == "" {
+		return "", fmt.Errorf("thingsboard provisioning returned empty access token")
+	}
+	return token, nil
 }

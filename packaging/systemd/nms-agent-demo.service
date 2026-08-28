@@ -1,0 +1,38 @@
+[Unit]
+Description=NMS Agent Demo (Dummy Multi-Site Telemetry)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nms-agent
+Group=nms-agent
+
+RuntimeDirectory=nms-agent
+RuntimeDirectoryMode=0755
+StateDirectory=nms-agent
+LogsDirectory=nms-agent
+
+WorkingDirectory=/etc/nms-agent
+EnvironmentFile=-/etc/nms-agent/nms-agent.env
+
+ExecStart=/opt/nms-agent/nms-agent run --config /etc/nms-agent/agent.yml --collector-mode dummy
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+MemoryMax=256M
+LimitNOFILE=65536
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/nms-agent /var/log/nms-agent /run/nms-agent /etc/nms-agent/devices.d /etc/nms-agent/profiles
+
+[Install]
+WantedBy=multi-user.target

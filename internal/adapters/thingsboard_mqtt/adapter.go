@@ -206,6 +206,8 @@ type ThingsBoardMQTTAdapter struct {
 	seenRelationDevices map[string]struct{}
 	deviceAddresses     map[string]string
 	sentDeviceAddresses map[string]string
+	deviceSiteKeys      map[string]string
+	sentDeviceSiteKeys  map[string]string
 }
 
 func (a *ThingsBoardMQTTAdapter) SetThingsBoardTokenStore(store interface {
@@ -237,6 +239,23 @@ func (a *ThingsBoardMQTTAdapter) SetDeviceAddresses(addresses map[string]string)
 	}
 }
 
+// SetDeviceSiteKeys publishes demo/operations grouping metadata as device attributes.
+// Asset relations remain managed in ThingsBoard and are not inferred from this value.
+func (a *ThingsBoardMQTTAdapter) SetDeviceSiteKeys(siteKeys map[string]string) {
+	if a == nil {
+		return
+	}
+	a.deviceSiteKeys = map[string]string{}
+	for deviceID, siteKey := range siteKeys {
+		if deviceID != "" && siteKey != "" {
+			a.deviceSiteKeys[deviceID] = siteKey
+		}
+	}
+	if a.sentDeviceSiteKeys == nil {
+		a.sentDeviceSiteKeys = map[string]string{}
+	}
+}
+
 func NewAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, error) {
 	c, err := parseConfig(cfg)
 	if err != nil {
@@ -246,7 +265,7 @@ func NewAdapter(cfg map[string]any) (*ThingsBoardMQTTAdapter, error) {
 		c.AutoReconnect = false
 	}
 
-	adapter := &ThingsBoardMQTTAdapter{cfg: c, clients: map[string]genericMQTTClient{}, prov: tbintegration.NewProvisioningClient(c.Provisioning), now: time.Now, seenRelationDevices: map[string]struct{}{}, deviceAddresses: map[string]string{}, sentDeviceAddresses: map[string]string{}}
+	adapter := &ThingsBoardMQTTAdapter{cfg: c, clients: map[string]genericMQTTClient{}, prov: tbintegration.NewProvisioningClient(c.Provisioning), now: time.Now, seenRelationDevices: map[string]struct{}{}, deviceAddresses: map[string]string{}, sentDeviceAddresses: map[string]string{}, deviceSiteKeys: map[string]string{}, sentDeviceSiteKeys: map[string]string{}}
 	if c.Integration.API.BaseURL != "" && c.Integration.API.APIKey != "" && c.Integration.Site.AssetID != "" {
 		rest := tbintegration.NewClient(c.Integration.API)
 		adapter.rest = rest
@@ -325,6 +344,7 @@ func (a *ThingsBoardMQTTAdapter) SendBatch(ctx context.Context, batch []models.T
 		return err
 	}
 	a.mergeDeviceAddressAttributes(attrPayload, batch)
+	a.mergeDeviceSiteAttributes(attrPayload, batch)
 	for _, deviceID := range uniqueDeviceNames(batch) {
 		token, err := a.tokenForDevice(ctx, deviceID)
 		if err != nil {
@@ -424,6 +444,27 @@ func (a *ThingsBoardMQTTAdapter) mergeDeviceAddressAttributes(attrPayload map[st
 	}
 }
 
+func (a *ThingsBoardMQTTAdapter) mergeDeviceSiteAttributes(attrPayload map[string]map[string]any, batch []models.Telemetry) {
+	if len(batch) == 0 || len(a.deviceSiteKeys) == 0 {
+		return
+	}
+	if a.sentDeviceSiteKeys == nil {
+		a.sentDeviceSiteKeys = map[string]string{}
+	}
+	for _, deviceID := range uniqueDeviceNames(batch) {
+		siteKey := a.deviceSiteKeys[deviceID]
+		if siteKey == "" || a.sentDeviceSiteKeys[deviceID] == siteKey {
+			continue
+		}
+		deviceAttrs := attrPayload[deviceID]
+		if deviceAttrs == nil {
+			deviceAttrs = map[string]any{}
+		}
+		deviceAttrs["site_key"] = siteKey
+		attrPayload[deviceID] = deviceAttrs
+	}
+}
+
 func (a *ThingsBoardMQTTAdapter) markDeviceAddressAttributesSent(deviceID string, attrs map[string]any) {
 	if len(attrs) == 0 {
 		return
@@ -433,6 +474,9 @@ func (a *ThingsBoardMQTTAdapter) markDeviceAddressAttributesSent(deviceID string
 	}
 	if ip, ok := attrs["ip_address"].(string); ok && ip != "" {
 		a.sentDeviceAddresses[deviceID] = ip
+	}
+	if siteKey, ok := attrs["site_key"].(string); ok && siteKey != "" {
+		a.sentDeviceSiteKeys[deviceID] = siteKey
 	}
 }
 

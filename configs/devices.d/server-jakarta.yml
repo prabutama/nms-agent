@@ -1,0 +1,9 @@
+id: server-jakarta
+site_key: jakarta
+address: 10.10.1.10
+vendor: demo
+model: server
+icmp:
+  enabled: false
+snmp:
+  enabled: false

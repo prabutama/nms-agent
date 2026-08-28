@@ -1,0 +1,9 @@
+id: firewall-jakarta
+site_key: jakarta
+address: 10.10.1.2
+vendor: demo
+model: firewall
+icmp:
+  enabled: false
+snmp:
+  enabled: false
